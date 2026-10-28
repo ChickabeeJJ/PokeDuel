@@ -8,11 +8,12 @@ Open `index.html` in a modern browser, or serve the folder with any static HTTP 
 
 ## Included in this prototype
 
-- Starter choice (Bulbasaur, Charmander, Squirtle), at level 10.
+- First-join onboarding with 27 starter choices across Generations I–IX, at level 10.
 - Three daily encounters (easy, medium, hard), tracked by the visitor's local calendar date.
 - Unlimited practice encounters with lower rewards.
 - Level and XP progression, coins, an item shop, generation-era pack tiers, a party roster, and Pokédex search.
-- Classic pixel battle sprites where available, preferring the Pokémon Emerald sprite set and falling back to Pokémon Black & White / PokéAPI sprites.
+- A softer illustrated coastal visual direction, animated backgrounds and controls, and a full-screen starter journey.
+- Classic pixel battle sprites where available, preferring Pokémon Emerald sprites and falling back to Pokémon Black & White / PokéAPI sprites.
 - Local browser save data and a starter privacy-policy page.
 - Google sign-in is intentionally not wired up yet.
 
