@@ -274,3 +274,7 @@ body.is-onboarding main{width:100%;max-width:none;min-height:100vh;margin:0;padd
  .modal-pokemon{align-items:flex-start}
  footer{align-items:flex-start;flex-direction:column}
 }
+
+/* Account controls */
+.auth-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+#authStatus{overflow-wrap:anywhere;max-width:760px}
