@@ -1,9 +1,41 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {
+  GoogleAuthProvider,
+  getAuth,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  serverTimestamp,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAoOPSRcfDNqHsbAw3s771xttxmkQFZRFA",
+  authDomain: "poke-duel.firebaseapp.com",
+  projectId: "poke-duel",
+  storageBucket: "poke-duel.firebasestorage.app",
+  messagingSenderId: "484956920261",
+  appId: "1:484956920261:web:baed770f30ff57affd53ac",
+  measurementId: "G-71KJCN6WBP"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
 (() => {
 'use strict';
 
 const API = 'https://pokeapi.co/api/v2';
 const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 const STORAGE_KEY = 'pokeduel-save-v1';
+const LOCAL_MODIFIED_KEY = 'pokeduel-save-modified-v1';
 const DAILY = ['easy','medium','hard'];
 const REWARDS = {easy:{xp:80,coins:40,level:8},medium:{xp:160,coins:75,level:12},hard:{xp:300,coins:150,level:16},practice:{xp:28,coins:12,level:10}};
 const STARTERS_BY_GEN = {
@@ -66,6 +98,14 @@ const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 const deep = o => JSON.parse(JSON.stringify(o));
 function defaultSave(){return {version:1,coins:250,starterChosen:false,starterId:null,party:[],selectedId:null,inventory:{potion:2,candy:0,ball:0},dailyDate:todayKey(),daily:{easy:null,medium:null,hard:null},wins:0,battles:0,practiceCount:0,ownedDex:[],settings:{animations:true,reducedEffects:false},lastActive:''}}
 let save = readSave();
+const initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
+let currentUser = null;
+let authReady = false;
+let applyingRemoteSave = false;
+let booting = true;
+let cloudSaveTimer = null;
+let cloudWriteQueue = Promise.resolve();
+let authStatusMessage = 'Not signed in. Progress stays on this device.';
 let battle = null;
 let activePage = 'home';
 let dexOffset = 0, dexLoaded = [], dexBusy = false, allPokemonList = null;
@@ -74,8 +114,175 @@ const pokemonCache = new Map();
 const moveCache = new Map();
 
 function readSave(){try{const v=JSON.parse(localStorage.getItem(STORAGE_KEY));return v&&v.version===1?{...defaultSave(),...v,inventory:{...defaultSave().inventory,...(v.inventory||{})},settings:{...defaultSave().settings,...(v.settings||{})}}:defaultSave()}catch(e){return defaultSave()}}
-function persist(){save.lastActive=new Date().toISOString();try{localStorage.setItem(STORAGE_KEY,JSON.stringify(save))}catch(e){console.warn('Could not save locally',e)}updateHeader()}
+function persist(){
+ save.lastActive=new Date().toISOString();
+ try{
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(save));
+  if(!booting&&!applyingRemoteSave)localStorage.setItem(LOCAL_MODIFIED_KEY,String(Date.now()));
+ }catch(e){console.warn('Could not save locally',e)}
+ updateHeader();
+ if(!booting&&!applyingRemoteSave&&currentUser&&authReady)scheduleCloudSave();
+}
 function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2400)}
+function getLocalSaveModifiedAt(){
+ try{
+  const saved=Number(localStorage.getItem(LOCAL_MODIFIED_KEY));
+  if(Number.isFinite(saved)&&saved>0)return saved;
+ }catch(e){}
+ return initialLocalSaveTimestamp;
+}
+function normaliseSave(raw){
+ if(!raw||raw.version!==1)return null;
+ const base=defaultSave();
+ const normalized={
+  ...base,...raw,
+  inventory:{...base.inventory,...(raw.inventory||{})},
+  settings:{...base.settings,...(raw.settings||{})},
+  daily:{...base.daily,...(raw.daily||{})},
+  party:Array.isArray(raw.party)?raw.party:[],
+  ownedDex:Array.isArray(raw.ownedDex)?[...new Set(raw.ownedDex.map(Number).filter(n=>Number.isFinite(n)&&n>0))]:[]
+ };
+ normalized.coins=Number.isFinite(Number(normalized.coins))?Math.max(0,Number(normalized.coins)):base.coins;
+ normalized.wins=Number.isFinite(Number(normalized.wins))?Math.max(0,Number(normalized.wins)):0;
+ normalized.battles=Number.isFinite(Number(normalized.battles))?Math.max(0,Number(normalized.battles)):0;
+ normalized.practiceCount=Number.isFinite(Number(normalized.practiceCount))?Math.max(0,Number(normalized.practiceCount)):0;
+ normalized.starterChosen=Boolean(normalized.starterChosen);
+ return normalized;
+}
+function setAuthStatus(message){
+ authStatusMessage=message;
+ const status=$('#authStatus');
+ if(status)status.textContent=currentUser?authStatusMessage:'Not signed in. Progress stays on this device.';
+}
+function renderAuthState(){
+ const signIn=$('#googleSignIn'),signOutButton=$('#googleSignOut');
+ if(signIn)signIn.hidden=Boolean(currentUser);
+ if(signOutButton)signOutButton.hidden=!currentUser;
+ const name=$('#profileName');
+ if(name)name.textContent=currentUser?.displayName||'ROOKIE TRAINER';
+ const status=$('#authStatus');
+ if(status)status.textContent=currentUser?authStatusMessage:'Not signed in. Progress stays on this device.';
+}
+function authErrorMessage(error){
+ const code=error?.code||'';
+ if(code==='auth/unauthorized-domain')return 'This domain is not authorised. Add pokeduel-henna.vercel.app under Firebase Authentication → Settings → Authorised domains.';
+ if(code==='auth/operation-not-allowed')return 'Google sign-in is not enabled yet. Enable Google in Firebase Authentication → Sign-in method.';
+ if(code==='auth/popup-blocked')return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.';
+ if(code==='auth/popup-closed-by-user')return 'Google sign-in was cancelled.';
+ if(code==='auth/network-request-failed')return 'Network error during sign-in. Check your connection and try again.';
+ if(code==='permission-denied'||code==='firestore/permission-denied')return 'Firestore denied the save. Check that Firestore is created and its rules allow each signed-in user to access only their own /users/{uid} document.';
+ return error?.message||'Something went wrong. Check the browser console for details.';
+}
+function writeCloudSave(user,saveSnapshot){
+ const snapshot=deep(saveSnapshot);
+ const operation=async()=>{
+  await setDoc(doc(db,'users',user.uid),{
+   schemaVersion:1,
+   saveData:snapshot,
+   displayName:user.displayName||null,
+   email:user.email||null,
+   photoURL:user.photoURL||null,
+   updatedAt:serverTimestamp()
+  },{merge:true});
+  try{localStorage.setItem(LOCAL_MODIFIED_KEY,String(Date.now()))}catch(e){}
+ };
+ cloudWriteQueue=cloudWriteQueue.then(operation,operation);
+ return cloudWriteQueue;
+}
+function scheduleCloudSave(){
+ if(cloudSaveTimer)clearTimeout(cloudSaveTimer);
+ cloudSaveTimer=setTimeout(()=>{
+  cloudSaveTimer=null;
+  if(!currentUser||!authReady||applyingRemoteSave)return;
+  const user=currentUser;
+  const snapshot=deep(save);
+  writeCloudSave(user,snapshot).then(()=>{
+   if(currentUser?.uid===user.uid)setAuthStatus('Signed in · cloud save synced.');
+  }).catch(error=>{
+   console.error('PokeDuel cloud save failed:',error);
+   if(currentUser?.uid===user.uid)setAuthStatus('Signed in, but cloud save failed: '+authErrorMessage(error));
+  });
+ },650);
+}
+function refreshAfterCloudRestore(){
+ checkNewDay();
+ if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');
+ else document.body.classList.remove('reduced-effects');
+ renderHome();renderProfile();
+ if(save.starterChosen){pageTo('home');renderTeam()}else{pageTo('starter')}
+ updateHeader();
+}
+async function syncSignedInUser(user){
+ setAuthStatus('Signed in · checking your cloud save…');
+ try{
+  const userRef=doc(db,'users',user.uid);
+  const snap=await getDoc(userRef);
+  if(!snap.exists()){
+   await writeCloudSave(user,save);
+   setAuthStatus('Signed in · this device’s progress was backed up to your account.');
+   toast('PokeDuel progress backed up to your account.');
+   return;
+  }
+  const cloudData=snap.data();
+  const remoteSave=normaliseSave(cloudData.saveData);
+  if(!remoteSave)throw new Error('The cloud save format is missing or unsupported. Your local save has not been deleted.');
+  const cloudUpdatedAt=Number(cloudData.updatedAt?.toMillis?.()||Date.parse(remoteSave.lastActive||'')||0);
+  const localUpdatedAt=getLocalSaveModifiedAt();
+  if(localUpdatedAt>cloudUpdatedAt){
+   await writeCloudSave(user,save);
+   setAuthStatus('Signed in · your newer local progress was synced to the cloud.');
+   toast('Your local progress was synced to your account.');
+   return;
+  }
+  applyingRemoteSave=true;
+  save=remoteSave;
+  persist();
+  try{localStorage.setItem(LOCAL_MODIFIED_KEY,String(cloudUpdatedAt||Date.now()))}catch(e){}
+  applyingRemoteSave=false;
+  refreshAfterCloudRestore();
+  setAuthStatus('Signed in · cloud save synced.');
+  toast('Your account save has been loaded.');
+ }catch(error){
+  applyingRemoteSave=false;
+  console.error('PokeDuel cloud sync failed:',error);
+  const message=authErrorMessage(error);
+  setAuthStatus('Signed in, but cloud sync is unavailable: '+message);
+  toast('Signed in, but cloud saving needs setup.');
+ }
+}
+function startFirebaseAuth(){
+ $('#googleSignIn').addEventListener('click',async()=>{
+  const button=$('#googleSignIn');
+  button.disabled=true;
+  try{await signInWithPopup(auth,googleProvider)}
+  catch(error){
+   console.error('Google sign-in failed:',error);
+   const message=authErrorMessage(error);
+   setAuthStatus(message);toast(message);
+  }finally{button.disabled=false}
+ });
+ $('#googleSignOut').addEventListener('click',async()=>{
+  const button=$('#googleSignOut');
+  button.disabled=true;
+  try{
+   if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
+   if(currentUser&&authReady)await writeCloudSave(currentUser,save);
+   await signOut(auth);
+   toast('Signed out. Your local save is still available on this device.');
+  }catch(error){
+   console.error('Sign-out failed:',error);
+   const message=authErrorMessage(error);setAuthStatus(message);toast(message);
+  }finally{button.disabled=false}
+ });
+ onAuthStateChanged(auth,async user=>{
+  currentUser=user;
+  authReady=true;
+  renderAuthState();
+  if(user)await syncSignedInUser(user);
+  else setAuthStatus('Not signed in. Progress stays on this device.');
+ });
+}
+
 async function api(path){const url=path.startsWith('http')?path:API+path;const res=await fetch(url);if(!res.ok)throw new Error('PokéAPI request failed: '+res.status);return res.json()}
 async function getPokemon(id){const key=String(id);if(pokemonCache.has(key))return pokemonCache.get(key);const pending=api('/pokemon/'+encodeURIComponent(key)).then(p=>{pokemonCache.set(key,p);return p});pokemonCache.set(key,pending);try{const p=await pending;pokemonCache.set(key,p);return p}catch(e){pokemonCache.delete(key);throw e}}
 function pickSprite(p,back=false){
@@ -118,7 +325,7 @@ async function renderTeam(){const prompt=$('#starterPrompt'),roster=$('#rosterSe
 if(!save.party.length){save.starterChosen=false;persist();renderTeam();return}
 const cards=await Promise.all(save.party.map(async e=>{let p;try{p=await getPokemon(e.pokemonId)}catch(err){p={name:e.name,id:e.pokemonId,types:[{type:{name:'normal'},slot:1}],stats:[],sprites:{front_default:SPRITES+'/'+e.pokemonId+'.png'}}}
  const types=getTypes(p),active=save.selectedId===e.uid,st=statsFrom(p);return '<article class="pokemon-card" data-uid="'+escAttr(e.uid)+'"><img loading="lazy" src="'+escAttr(pickSprite(p))+'" alt="'+escAttr(cap(e.name))+'"><h3>'+esc(cap(e.name))+(active?' <span style="color:var(--cyan)">◆</span>':'')+'</h3><p>NO. '+String(e.pokemonId).padStart(3,'0')+' · LV. '+e.level+'</p><div class="types">'+types.map(t=>'<span class="type '+t+'">'+t+'</span>').join('')+'</div><div class="mini-bar"><i style="width:'+Math.min(100, e.level/100*100)+'%"></i></div><p style="margin-top:7px">XP '+e.xp+' / '+(e.level>=100?'MAX':xpNeeded(e.level))+'</p><div class="card-actions"><button class="btn '+(active?'primary':'ghost')+'" data-select="'+escAttr(e.uid)+'">'+(active?'ACTIVE':'SELECT')+'</button>'+(save.party.length>1?'<button class="btn ghost" data-release="'+escAttr(e.uid)+'">RELEASE</button>':'')+'</div></article>'}));$('#rosterGrid').innerHTML=cards.join('');$('#teamCount').textContent=save.party.length+' / 6 PARTY'}
-function renderProfile(){$('#profileStats').textContent='Battles won: '+save.wins+' · Battles fought: '+save.battles+' · Species caught: '+save.ownedDex.length;$('#animationsToggle').checked=save.settings.animations;$('#effectsToggle').checked=save.settings.reducedEffects}
+function renderProfile(){$('#profileStats').textContent='Battles won: '+save.wins+' · Battles fought: '+save.battles+' · Species caught: '+save.ownedDex.length;$('#animationsToggle').checked=save.settings.animations;$('#effectsToggle').checked=save.settings.reducedEffects;renderAuthState()}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function escAttr(s){return esc(s).replace(/'/g,'&#39;')}
 function showModal(html){$('#modalContent').innerHTML=html;$('#modal').classList.remove('hidden')}
@@ -281,4 +488,6 @@ function setupListeners(){
 }
 function init(){checkNewDay();if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');setupListeners();renderHome();renderProfile();if(save.starterChosen){renderTeam();pageTo('home')}else{pageTo('starter')}if(save.starterChosen&&save.starterId&&!save.ownedDex.includes(save.starterId))save.ownedDex.push(save.starterId);persist()}
 init();
+booting=false;
+startFirebaseAuth();
 })();
