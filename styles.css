@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&family=Chakra+Petch:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&family=Chakra+Petch:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
 :root{--bg:#08111f;--panel:#101e32;--panel2:#14243b;--line:#2d4864;--text:#e7f1ff;--muted:#8ca3bb;--cyan:#43e5ef;--pink:#ff5a83;--gold:#ffd56b;--green:#75e6a5;--shadow:0 16px 50px #0006}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Chakra Petch',sans-serif;font-size:15px;line-height:1.45;background-image:radial-gradient(ellipse at 70% -20%,#1b4265 0,transparent 42%),linear-gradient(145deg,#07111f,#0b1727 60%,#07111b)}
 button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}a{color:inherit;text-decoration:none}.scanlines{pointer-events:none;position:fixed;inset:0;z-index:8;opacity:.06;background:repeating-linear-gradient(0deg,transparent 0 3px,#cceeff 4px,#cceeff 5px);mix-blend-mode:screen}
@@ -67,7 +67,6 @@ footer{display:flex;justify-content:space-between;align-items:center;gap:20px;pa
 @media(max-width:700px){.battlefield .enemy-platform{width:42%;right:5%;top:46%}.battlefield .player-platform{width:59%;left:-2%;bottom:3%}}
 
 /* ── PokeDuel art direction pass: soft dusk, layered depth, warmer surfaces ── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 :root{
  --bg:#101a2b;--panel:#172840;--panel2:#1c3450;--line:#405977;--text:#f1f4f8;--muted:#adbed1;
  --cyan:#92e2df;--pink:#ff9db2;--gold:#f7d998;--green:#a6e3b4;
@@ -291,3 +290,43 @@ body.is-onboarding main{max-width:none;width:100%;padding:0;margin:0;min-height:
 @media(max-width:800px){.onboard-content{grid-template-columns:1fr;gap:22px;padding:28px 0}.onboard-intro{max-width:650px;padding-bottom:0}.onboard-intro h1{font-size:clamp(40px,8vw,60px);margin:13px 0}.onboard-intro>p{font-size:13px;max-width:590px}.onboard-note{margin-top:18px}.onboard-starter-grid{min-height:220px}.onboard-starter-card img{height:clamp(100px,23vw,165px)}.starter-explorer{max-width:720px;width:100%;margin:0 auto}.onboard-footer{font-size:6px}.onboard-header{min-height:66px}.generation-tab{padding:8px 2px}.generation-tab b{font-size:12px}}
 @media(max-width:540px){.onboarding-page{padding:0 13px 15px}.onboard-header .brand{font-size:12px}.onboard-header .brand-mark{width:31px;height:31px;font-size:9px}.onboard-step{font-size:6px;letter-spacing:.5px}.onboard-content{padding:23px 0;gap:20px}.onboard-intro h1{font-size:39px;letter-spacing:-1.6px}.onboard-intro>p{line-height:1.65}.onboard-note{font-size:7px}.starter-explorer{padding:10px;border-radius:17px}.generation-bar{gap:2px;padding:3px}.generation-tab{font-size:6px;padding:7px 1px}.generation-tab b{font-size:10px;margin:3px 0}.generation-tab small{font-size:4.8px;letter-spacing:0}.starter-carousel-head{padding-top:17px}.starter-carousel-head h2{font-size:15px}.onboard-starter-grid{gap:6px;min-height:205px}.onboard-starter-card{padding:9px 5px 0;border-radius:12px 12px 12px 4px}.partner-number{font-size:6px}.onboard-starter-card img{height:100px}.partner-name{font-size:11px}.onboard-starter-card .type{padding:3px 7px;font-size:6px}.partner-choose{font-size:5.6px;padding:9px 1px}.starter-selection-footer{align-items:center;gap:7px}.chosen-summary{gap:6px}.chosen-summary>img{width:38px;height:38px}.chosen-empty{width:36px;height:36px}.chosen-summary b{font-size:10px}.chosen-summary small{font-size:5.5px}.confirm-starter{padding:11px 10px;font-size:7px;letter-spacing:.3px;min-height:42px}.onboard-footer{font-size:5px;letter-spacing:.3px}.onboard-footer span:last-child{display:none}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* A living illustrated coastline instead of a flat hero rectangle. */
+.hero-art{background:
+ radial-gradient(ellipse at 80% 22%,#fff1c9 0 2%,#ffd6a37a 3%,transparent 13%),
+ radial-gradient(ellipse at 18% 16%,#f4fcff9c 0 3%,transparent 14%),
+ radial-gradient(ellipse at 34% 11%,#ffffff7d 0 4%,transparent 16%),
+ linear-gradient(180deg,#6faec2 0%,#9dcfd1 32%,#ecc8ab 43%,#6ca8bb 43.5%,#367b97 58%,#20556f 100%)}
+.hero-art:before{content:"";position:absolute;inset:0;background:
+ radial-gradient(ellipse at 16% 18%,#effbff 0 3%,transparent 3.5%),
+ radial-gradient(ellipse at 21% 15%,#effbff 0 5%,transparent 5.5%),
+ radial-gradient(ellipse at 26% 18%,#effbff 0 3%,transparent 3.5%),
+ radial-gradient(ellipse at 60% 11%,#ffffffbb 0 4%,transparent 4.5%),
+ radial-gradient(ellipse at 66% 14%,#ffffff9a 0 4%,transparent 4.5%),
+ linear-gradient(180deg,transparent 0 42%,#f6e4c542 43%,transparent 45%),
+ repeating-linear-gradient(0deg,transparent 0 8px,#d3faff09 9px 10px)}
+.hero-art:after{content:"";position:absolute;left:-10%;right:-10%;bottom:-3%;height:47%;background:
+ radial-gradient(ellipse at 17% 100%,#1c5260 0 18%,transparent 19%),
+ radial-gradient(ellipse at 28% 100%,#214d5a 0 20%,transparent 21%),
+ radial-gradient(ellipse at 76% 100%,#1e5361 0 18%,transparent 19%),
+ linear-gradient(180deg,transparent 0 6%,#b4ebdc55 7%,transparent 9%),
+ repeating-linear-gradient(176deg,transparent 0 13px,#aee8e42f 14px,transparent 16px),
+ linear-gradient(180deg,transparent 0%,#16465f 100%);clip-path:polygon(0 9%,14% 16%,28% 5%,43% 16%,55% 7%,68% 18%,81% 8%,100% 16%,100% 100%,0 100%);animation:seaSlide 12s ease-in-out infinite alternate}
+@keyframes seaSlide{from{transform:translateX(-1.5%);opacity:.75}to{transform:translateX(1.5%);opacity:1}}
+.sun-disc{background:radial-gradient(circle at 38% 35%,#fff6d5,#f3d5a5 70%);box-shadow:0 0 45px #f7d7aa85,0 0 95px #f7d7aa35;animation:sunGlow 7s ease-in-out infinite alternate}
+@keyframes sunGlow{from{box-shadow:0 0 34px #f7d7aa65,0 0 75px #f7d7aa22;transform:scale(.97)}to{box-shadow:0 0 58px #f7d7aaa0,0 0 115px #f7d7aa37;transform:scale(1.03)}}
+.orbit{border-color:#e6fbfa59;animation:orbitDrift 16s ease-in-out infinite alternate}
+.orbit2{animation-delay:-7s}
+@keyframes orbitDrift{from{transform:translate(-50%,-50%) rotate(-29deg) scale(.98)}to{transform:translate(-50%,-50%) rotate(-22deg) scale(1.04)}}
+.hero-art .art-label,.hero-art .art-corner{padding:8px 10px;border-radius:8px;background:#122b405c;border:1px solid #c7eef021;backdrop-filter:blur(5px)}
+.hero-art img{z-index:2;filter:drop-shadow(0 17px 12px #06101b72);animation:heroCreatureFloat 5.1s ease-in-out infinite}
+@keyframes heroCreatureFloat{0%,100%{transform:translateY(0) rotate(-.5deg)}50%{transform:translateY(-9px) rotate(.7deg)}}
+.hero-stats>div{padding-left:14px;border-left:2px solid #9be5df54}
+.hero-stats>div:first-child{padding-left:0;border-left:0}
+.hero-stats b{color:#f3eee5}
+.practice-panel{background:
+ radial-gradient(circle at 88% 8%,#9ce6da1b,transparent 34%),
+ linear-gradient(135deg,#213751,#17293f)}
+.continue-panel{background:
+ radial-gradient(circle at 5% 100%,#b9d6e31a,transparent 30%),
+ linear-gradient(135deg,#21374f,#192b41)}
