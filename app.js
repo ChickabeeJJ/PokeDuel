@@ -16,6 +16,7 @@ const GEN_ROMAN = {1:'I',2:'II',3:'III',4:'IV',5:'V',6:'VI',7:'VII',8:'VIII',9:'
 const STARTERS = Object.values(STARTERS_BY_GEN).flat();
 let selectedStarterId = null;
 let selectedStarterInfo = null;
+let starterChoosing = false;
 let activeStarterGen = 1;
 const ENEMY_POOLS = {
  easy:[16,19,10,13,25,39,41,43,46,48,52,54,56,60,66,69,72,74,90,98],
@@ -131,23 +132,24 @@ async function renderStarterSelection(){
  $('#generationRegion').textContent='GENERATION '+String(activeStarterGen).padStart(2,'0')+' / '+REGION_NAMES[activeStarterGen];
  const titles={1:'THE ORIGINAL THREE',2:'THE JOHTO TRIO',3:'THE HOENN TRIO',4:'THE SINNOH TRIO',5:'THE UNOVA TRIO',6:'THE KALOS TRIO',7:'THE ALOLA TRIO',8:'THE GALAR TRIO',9:'THE PALDEA TRIO'};
  $('#generationTitle').textContent=titles[activeStarterGen];
- const ids=STARTERS_BY_GEN[activeStarterGen];
+ const requestedGen=activeStarterGen;
+ const ids=STARTERS_BY_GEN[requestedGen];
  $('#starterCount').textContent='0'+activeStarterGen+' / 09';
  grid.innerHTML='<div class="starter-loading"><span class="loading-orbit"></span>Finding your first partners…</div>';
  try{
   const starters=await Promise.all(ids.map(getPokemon));
-  if(activePage!=='starter')return;
+  if(activePage!=='starter'||requestedGen!==activeStarterGen)return;
   grid.innerHTML=starters.map(p=>{
    const type=getTypes(p)[0]||'normal';const isSelected=Number(selectedStarterId)===p.id;
    const art=pickSprite(p)||p.sprites?.other?.['official-artwork']?.front_default;
    return '<button type="button" class="onboard-starter-card '+(isSelected?'selected':'')+'" data-pick-starter="'+p.id+'"><span class="partner-bloom"></span><span class="partner-number">NO. '+String(p.id).padStart(3,'0')+'</span><img src="'+escAttr(art)+'" alt="'+escAttr(cap(p.name))+'" loading="eager"><span class="partner-name">'+esc(cap(p.name))+'</span><span class="type '+type+'">'+type+'</span><span class="partner-choose">'+(isSelected?'✓ YOUR PARTNER':'CHOOSE PARTNER')+'</span></button>'
   }).join('');
   updateStarterSelectionSummary();
- }catch(e){grid.innerHTML='<div class="empty-state">We could not reach the Pokédex. Check your connection and try again.</div>'}
+ }catch(e){if(activePage==='starter'&&requestedGen===activeStarterGen)grid.innerHTML='<div class="empty-state starter-error"><span class="error-spark">✧</span><b>THE PARTNERS ARE HIDING</b><p>We could not reach the Pokédex. Check your connection, then try again.</p><button type="button" class="btn ghost" id="retryStarters">TRY AGAIN ↻</button></div>'}
 }
 function updateStarterSelectionSummary(){
  const pId=Number(selectedStarterId);const valid=STARTERS.includes(pId);
- const button=$('#confirmStarter');if(button)button.disabled=!valid;
+ const button=$('#confirmStarter');if(button){button.disabled=!valid||starterChoosing;if(!starterChoosing)button.innerHTML='BEGIN YOUR JOURNEY <span>↗</span>';}
  const summary=$('#chosenSummary');if(!summary)return;
  if(!valid){summary.innerHTML='<span class="chosen-empty">✦</span><span><b>YOUR PARTNER</b><small>Pick a Pokémon above</small></span>';return}
  const card=$('#onboardStarterGrid [data-pick-starter="'+pId+'"]');
@@ -166,13 +168,18 @@ function selectStarter(id){
  updateStarterSelectionSummary();
 }
 function setStarter(id){
- if(save.starterChosen)return;
+ if(save.starterChosen||starterChoosing)return;
  const picked=Number(id??selectedStarterId);
  if(!STARTERS.includes(picked)){toast('Choose a starter first.');return}
+ starterChoosing=true;
+ const confirm=$('#confirmStarter');if(confirm){confirm.disabled=true;confirm.textContent='MEETING YOUR PARTNER…'}
  getPokemon(picked).then(p=>{
+  if(save.starterChosen)return;
   const entry=addOwned(p,10);save.starterChosen=true;save.starterId=picked;save.selectedId=entry.uid;
-  persist();toast(cap(p.name)+' is joining your adventure!');renderHome();renderTeam();pageTo('home');
- }).catch(()=>toast('Could not load that Pokémon. Please try again.'));
+  starterChoosing=false;persist();toast(cap(p.name)+' is joining your adventure!');renderHome();renderTeam();pageTo('home');
+ }).catch(()=>{
+  starterChoosing=false;updateStarterSelectionSummary();toast('Could not load that Pokémon. Please try again.');
+ });
 }
 function typeEffect(moveType,types){return types.reduce((v,t)=>v*((TYPE_CHART[moveType]||{})[t]??1),1)}
 function pickFallbacks(type){return deep(FALLBACK_MOVES[type]||FALLBACK_MOVES.normal)}
@@ -258,7 +265,7 @@ function setupListeners(){
  $('#quickBattle').addEventListener('click',()=>startBattle('practice'));$('#practiceBtn').addEventListener('click',()=>startBattle('practice'));
  $('#starterGrid')?.addEventListener('click',e=>{const b=e.target.closest('[data-starter]');if(b)setStarter(Number(b.dataset.starter))});
  $('#generationBar').addEventListener('click',e=>{const b=e.target.closest('[data-gen]');if(!b)return;activeStarterGen=Number(b.dataset.gen);renderStarterSelection()});
- $('#onboardStarterGrid').addEventListener('click',e=>{const b=e.target.closest('[data-pick-starter]');if(b)selectStarter(Number(b.dataset.pickStarter))});
+ $('#onboardStarterGrid').addEventListener('click',e=>{if(e.target.closest('#retryStarters')){renderStarterSelection();return}const b=e.target.closest('[data-pick-starter]');if(b)selectStarter(Number(b.dataset.pickStarter))});
  $('#confirmStarter').addEventListener('click',()=>{if(!selectedStarterId){toast('Pick your first partner first.');return}setStarter(selectedStarterId)});
  $('#rosterGrid').addEventListener('click',e=>{const sel=e.target.closest('[data-select]'),rel=e.target.closest('[data-release]');if(sel){save.selectedId=sel.dataset.select;persist();renderTeam();updateHomeStarter()}if(rel)showRelease(rel.dataset.release)});
  $$('.tab').forEach(t=>t.addEventListener('click',()=>{$$('.tab').forEach(b=>b.classList.toggle('active',b===t));$('#shop-items').classList.toggle('hidden',t.dataset.shop!=='items');$('#shop-packs').classList.toggle('hidden',t.dataset.shop!=='packs')}));
