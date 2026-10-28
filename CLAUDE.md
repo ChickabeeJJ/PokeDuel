@@ -6,7 +6,7 @@
 
 PokeDuel is a browser-based daily Pokémon battle simulator. The long-term direction is a polished, cohesive game with clear, friendly UI inspired by the readability, colour and sense of adventure of Pokémon Scarlet/Violet. Do not copy exact proprietary UI, screenshots, artwork, sounds, or game assets.
 
-**Current-stage instruction:** the owner explicitly asked to remove the previous bespoke styling and leave a neutral, functional skeleton. The current UI is intentionally plain. Do not reintroduce elaborate CSS art direction, custom display fonts, cinematic battle backgrounds, excessive animations, decorative gradients, or a bespoke shop design unless the owner asks for that phase. The next task is authentication setup, managed by the owner. Do not implement or configure Firebase/Google sign-in unless directly instructed.
+**Current-stage instruction:** the owner explicitly asked to remove the previous bespoke styling and leave a neutral, functional skeleton. The current UI is intentionally plain. Do not reintroduce elaborate CSS art direction, custom display fonts, cinematic battle backgrounds, excessive animations, decorative gradients, or a bespoke shop design unless the owner asks for that phase. Firebase Google sign-in and per-user Firestore cloud saves are now implemented in `app.js` using browser-module imports; preserve the static deployment model and do not move to a bundler unless directly requested.
 
 **Graphic asset workflow:** ChatGPT is the designated graphic designer for original game backgrounds and visual assets. When finished artwork is needed, write a specific request to `ASSET_REQUESTS.md` (purpose, exact dimensions/aspect ratio, composition, palette, file format, transparency, and target file path). Do not fill the gap with random web images, copied screenshots, emoji, elaborate CSS illustrations, or external Pinterest/Google images. Wait for the user to provide the approved asset, then integrate it with sensible fallback behaviour.
 
@@ -53,7 +53,7 @@ Treat these as prototype capabilities to preserve and test, not as proof of full
 - Pokédex browsing/search and a privacy policy page.
 - A basic turn-based battle prototype.
 
-Known limitations that must not be misrepresented: Google sign-in and cloud saves are not enabled; progress is browser-local; the move-data integration is not a verified complete Serebii dataset; alternate forms and all edge cases are not comprehensively implemented; battle rules and balance still need validation; the privacy notice needs review and accurate operator/contact details before launch.
+Known limitations that must not be misrepresented: Google sign-in and cloud saves require Firebase Console setup (Google provider enabled, Vercel domain authorised, Firestore database created, restrictive UID-based rules published); move-data integration is not a verified complete Serebii dataset; alternate forms and all edge cases are not comprehensively implemented; battle rules and balance still need validation; account deletion is not implemented; the privacy notice needs review and accurate operator/contact details before launch.
 
 ## 5. UI rules for the current skeleton
 
@@ -96,11 +96,13 @@ The current UI should remain a low-styling wireframe until the owner starts the 
 - Search by species name or ID and support form variants where the API offers them.
 - Display network errors and loading states; avoid leaving permanent spinners on failures.
 
-### Local save
-- Local browser save is the current source of truth.
-- Do not add Firebase, OAuth, secrets, cloud sync, or account-related schema while the owner is preparing the sign-in step.
-- Never commit API secrets, OAuth client secrets, private keys, service-account JSON, or tokens.
-- When authentication work is authorised later, plan how an existing local save will be migrated into the signed-in account rather than overwritten.
+### Save and account sync
+- Local browser saves remain available as a cache, including when signed out.
+- Firebase Google sign-in is implemented in `app.js`; cloud saves live at `/users/{uid}` in Firestore.
+- On sign-in, the app compares a local modification timestamp with the Firestore document timestamp to choose which save to load. This is a simple last-modified strategy, not real-time conflict resolution.
+- Firebase Console configuration and Firestore rules are external setup steps. Never use public read/write rules.
+- Never commit service-account JSON, OAuth client secrets, private keys, or tokens. The browser config is public client config, not an Admin credential.
+- Account deletion is not implemented; keep privacy documentation accurate and address deletion before public launch.
 
 ## 7. Testing checklist
 
@@ -131,15 +133,15 @@ For each phase:
 6. Update `README.md`, `TECH_DEBT.md`, or `ASSET_REQUESTS.md` only where useful.
 7. Report what changed, what was tested, and what still needs a browser check.
 
-Suggested technical priorities after the owner's authentication work is ready:
+Suggested technical priorities after authentication setup is completed:
 1. Audit save and daily-reset correctness.
 2. Add a repeatable test checklist and address basic battle bugs.
 3. Improve Pokémon/forms/moveset coverage using documented, responsibly sourced data.
 4. Validate battle rules, switching, item use, and damage calculations.
 5. Balance rewards, pack pools, and progression.
 6. Plan the art direction and asset integration phase with explicit image requests.
-7. Add cloud save/auth only when configured and approved by the owner.
+7. Audit cloud-save edge cases after Firebase Console setup is complete.
 
 ## 9. Initial instruction to Claude Code
 
-Start by auditing the repository and describing the current architecture, data flow, save format, key event handlers, known bugs and test gaps. Do not redesign the interface or implement Firebase during that audit. Create or update `TECH_DEBT.md` with prioritised findings and `ASSET_REQUESTS.md` only for assets that are genuinely needed later. Report the smallest safe next step and wait before making major rewrites.
+Start by auditing the repository and describing the current architecture, data flow, save format, key event handlers, known bugs and test gaps. Do not redesign the interface during that audit. Firebase Google sign-in and cloud saves are already implemented; do not replace them with a different auth design unless the owner requests it. Create or update `TECH_DEBT.md` with prioritised findings and `ASSET_REQUESTS.md` only for assets that are genuinely needed later. Report the smallest safe next step and wait before making major rewrites.
