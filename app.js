@@ -125,7 +125,7 @@ async function renderStarterSelection(){
   if(activePage!=='starter')return;
   grid.innerHTML=starters.map(p=>{
    const type=getTypes(p)[0]||'normal';const isSelected=Number(selectedStarterId)===p.id;
-   const art=p.sprites?.other?.['official-artwork']?.front_default||pickSprite(p);
+   const art=pickSprite(p)||p.sprites?.other?.['official-artwork']?.front_default;
    return '<button type="button" class="onboard-starter-card '+(isSelected?'selected':'')+'" data-pick-starter="'+p.id+'"><span class="partner-bloom"></span><span class="partner-number">NO. '+String(p.id).padStart(3,'0')+'</span><img src="'+escAttr(art)+'" alt="'+escAttr(cap(p.name))+'" loading="eager"><span class="partner-name">'+esc(cap(p.name))+'</span><span class="type '+type+'">'+type+'</span><span class="partner-choose">'+(isSelected?'✓ YOUR PARTNER':'CHOOSE PARTNER')+'</span></button>'
   }).join('');
   updateStarterSelectionSummary();
