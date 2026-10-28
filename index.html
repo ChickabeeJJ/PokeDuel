@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="scanlines"></div>
 <header class="topbar">
   <a class="brand" href="#" aria-label="PokeDuel home"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a>
   <nav><button class="navlink active" data-page="home">HOME</button><button class="navlink" data-page="team">MY TEAM</button><button class="navlink" data-page="shop">SHOP</button><button class="navlink" data-page="dex">DEX</button></nav>
@@ -19,21 +18,44 @@
 </header>
 <main>
 <section id="page-starter" class="page onboarding-page">
- <div class="onboard-glow glow-a"></div><div class="onboard-glow glow-b"></div><div class="onboard-stars"></div>
- <header class="onboard-header"><a class="brand" href="#" aria-label="PokeDuel"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a><span class="onboard-step"><i></i> YOUR ADVENTURE STARTS HERE</span></header>
+ <header class="onboard-header">
+  <a class="brand" href="#" aria-label="PokeDuel home"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a>
+  <span class="onboard-step">FIRST-TIME SETUP</span>
+ </header>
  <div class="onboard-content">
-  <div class="onboard-intro"><div class="eyebrow"><i></i> A PARTNER FOR THE JOURNEY</div><h1>EVERY LEGEND<br>BEGINS WITH <em>ONE.</em></h1><p>Choose the Pokémon that feels right. Your first partner starts at level 10, and the rest of the world is waiting.</p><div class="onboard-note"><span class="note-spark">✦</span><span>27 first partners <b>·</b> 9 generations <b>·</b> your story</span></div></div>
-  <div class="starter-explorer">
+  <section class="onboard-intro">
+   <div class="eyebrow">START YOUR ADVENTURE</div>
+   <h1>Choose your first Pokémon</h1>
+   <p>Your first partner starts at level 10. Choose one of the nine generations below.</p>
+   <p>27 starter Pokémon · 9 generations</p>
+  </section>
+  <section class="starter-explorer">
    <div class="generation-bar" id="generationBar">
-    <button class="generation-tab active" data-gen="1">GEN <b>I</b><small>KANTO</small></button><button class="generation-tab" data-gen="2">GEN <b>II</b><small>JOHTO</small></button><button class="generation-tab" data-gen="3">GEN <b>III</b><small>HOENN</small></button><button class="generation-tab" data-gen="4">GEN <b>IV</b><small>SINNOH</small></button><button class="generation-tab" data-gen="5">GEN <b>V</b><small>UNOVA</small></button><button class="generation-tab" data-gen="6">GEN <b>VI</b><small>KALOS</small></button><button class="generation-tab" data-gen="7">GEN <b>VII</b><small>ALOLA</small></button><button class="generation-tab" data-gen="8">GEN <b>VIII</b><small>GALAR</small></button><button class="generation-tab" data-gen="9">GEN <b>IX</b><small>PALDEA</small></button>
+    <button class="generation-tab active" data-gen="1">Gen <b>I</b><small>Kanto</small></button>
+    <button class="generation-tab" data-gen="2">Gen <b>II</b><small>Johto</small></button>
+    <button class="generation-tab" data-gen="3">Gen <b>III</b><small>Hoenn</small></button>
+    <button class="generation-tab" data-gen="4">Gen <b>IV</b><small>Sinnoh</small></button>
+    <button class="generation-tab" data-gen="5">Gen <b>V</b><small>Unova</small></button>
+    <button class="generation-tab" data-gen="6">Gen <b>VI</b><small>Kalos</small></button>
+    <button class="generation-tab" data-gen="7">Gen <b>VII</b><small>Alola</small></button>
+    <button class="generation-tab" data-gen="8">Gen <b>VIII</b><small>Galar</small></button>
+    <button class="generation-tab" data-gen="9">Gen <b>IX</b><small>Paldea</small></button>
    </div>
-   <div class="starter-carousel-head"><div><span class="eyebrow" id="generationRegion">REGION 01 / KANTO</span><h2 id="generationTitle">THE ORIGINAL THREE</h2></div><span class="starter-count" id="starterCount">01 / 03</span></div>
-   <div class="onboard-starter-grid" id="onboardStarterGrid"><div class="starter-loading"><span class="loading-orbit"></span>Finding your first partners…</div></div>
-   <div class="starter-selection-footer"><div class="chosen-summary" id="chosenSummary"><span class="chosen-empty">✦</span><span><b>YOUR PARTNER</b><small>Pick a Pokémon above</small></span></div><button class="btn primary confirm-starter" id="confirmStarter" disabled>BEGIN YOUR JOURNEY <span>↗</span></button></div>
-  </div>
+   <div class="starter-carousel-head">
+    <div><span class="eyebrow" id="generationRegion">Generation 01 / Kanto</span><h2 id="generationTitle">Choose a starter</h2></div>
+    <span class="starter-count" id="starterCount">01 / 03</span>
+   </div>
+   <div class="onboard-starter-grid" id="onboardStarterGrid">
+    <div class="starter-loading">Loading starter Pokémon…</div>
+   </div>
+   <div class="starter-selection-footer">
+    <div class="chosen-summary" id="chosenSummary"><span class="chosen-empty">—</span><span><b>Your partner</b><small>Select a Pokémon above</small></span></div>
+    <button class="btn primary confirm-starter" id="confirmStarter" disabled>Confirm starter</button>
+   </div>
+  </section>
  </div>
- <div class="onboard-footer"><span>✧ A SMALL WORLD FULL OF BIG ADVENTURES</span><span>POKEDUEL <b>·</b> DAILY BATTLE CLUB</span></div>
 </section>
+
 <section id="page-home" class="page active">
   <div class="hero">
     <div class="hero-copy"><div class="eyebrow"><i></i> DAILY CHALLENGE <span id="todayLabel"></span></div>
@@ -41,7 +63,7 @@
     <p>Three battles. One team. Every day is a new test of your strategy.</p>
     <div class="hero-actions"><button class="btn primary" data-page="team">BUILD YOUR TEAM <span>↗</span></button><button class="btn ghost" id="quickBattle">QUICK PRACTICE</button></div>
     <div class="hero-stats"><div><b>1,025+</b><small>SPECIES TO DISCOVER</small></div><div><b>03</b><small>DAILY BATTLES</small></div><div><b>∞</b><small>PRACTICE RUNS</small></div></div></div>
-    <div class="hero-art"><div class="sun-disc"></div><div class="orbit orbit1"></div><div class="orbit orbit2"></div><img id="heroPokemon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png" alt="Charizard" onerror="this.style.display='none'"><span class="art-label">NO. 006 // FLAME</span><span class="art-corner">PD / 001</span></div>
+    <div class="hero-art"><img id="heroPokemon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png" alt="Charizard" onerror="this.style.display='none'"><span class="art-label">NO. 006 / CHARIZARD</span></div>
   </div>
   <section class="section-heading"><div><div class="eyebrow">TODAY'S GAUNTLET</div><h2>THE DAILY THREE</h2></div><span class="muted" id="dailyProgress">0 / 3 CLEARED</span></section>
   <div class="battle-grid">
@@ -58,68 +80,49 @@
   <div id="rosterSection" class="panel"><div class="panel-head"><span>ACTIVE ROSTER</span><span class="muted" id="teamCount">0 / 6 PARTY</span></div><div class="roster-grid" id="rosterGrid"></div><div class="roster-note">Tip: type matchups, status effects, and move coverage matter more than raw level.</div></div>
 </section>
 
-<section id="page-shop" class="page shop-page">
- <div class="shop-masthead">
-  <div class="shop-mist shop-mist-one"></div><div class="shop-mist shop-mist-two"></div><div class="shop-glints"></div>
-  <div class="shop-masthead-copy">
-   <div class="eyebrow"><i></i> THE HARBOR MARKET <span class="market-open">OPEN TODAY</span></div>
-   <h1>GOODIES FOR<br>YOUR <em>JOURNEY.</em></h1>
-   <p>Stock up, power up, and meet your next teammate. Earn coins from your daily battles and spend them wisely.</p>
-   <div class="shop-feature-tags"><span>✦ TRAINING TOOLS</span><span>✧ MYSTERY PARTNERS</span><span>◈ NO REAL-MONEY PURCHASES</span></div>
-  </div>
-  <div class="shop-masthead-art" aria-hidden="true">
-   <div class="market-moon"></div><div class="market-orbit orbit-a"></div><div class="market-orbit orbit-b"></div>
-   <div class="market-coin coin-one">◈</div><div class="market-coin coin-two">◈</div><div class="market-coin coin-three">◈</div>
-   <div class="market-stall"><span class="stall-roof"></span><span class="stall-awning"></span><span class="stall-front"></span><span class="stall-lantern"></span><span class="stall-crate crate-one"></span><span class="stall-crate crate-two"></span></div>
-   <div class="market-item potion-showcase"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png" alt=""></div>
-   <div class="market-item ball-showcase"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png" alt=""></div>
-  </div>
-  <div class="shop-wallet-card"><div class="wallet-emblem">◈</div><div><small>YOUR COIN PURSE</small><strong><span id="shopCoins">250</span> <i>COINS</i></strong></div><span class="wallet-shine">✦</span></div>
+<section id="page-shop" class="page">
+ <div class="page-title"><div class="eyebrow">SHOP</div><h1>Shop</h1><p>Spend coins earned from battles on items and Pokémon boxes.</p></div>
+ <div class="shop-balance"><strong>Coins:</strong> <span id="shopCoins">250</span> ◈</div>
+ <div class="shop-tabs">
+  <button class="tab active" data-shop="items">Items</button>
+  <button class="tab" data-shop="packs">Pokémon boxes</button>
  </div>
- <div class="shop-content">
-  <div class="shop-section-intro"><div><div class="eyebrow">THE MARKET STALLS</div><h2>What are we hunting for?</h2><p>Every purchase should make the next battle feel better.</p></div><div class="market-tip"><span>✧</span><p><b>MARKET TIP</b><small>Win a daily battle to refill your purse.</small></p></div></div>
-  <div class="shop-tabs shop-nav">
-   <button class="tab active" data-shop="items"><span class="shop-tab-icon">✚</span><span>ITEMS<small>Heal & train</small></span><span class="shop-tab-arrow">↗</span></button>
-   <button class="tab" data-shop="packs"><span class="shop-tab-icon">✧</span><span>POKÉMON BOXES<small>Discover partners</small></span><span class="shop-tab-arrow">↗</span></button>
-  </div>
-  <div id="shop-items" class="shop-grid market-grid">
-   <article class="shop-card market-item-card potion-card">
-    <div class="product-card-top"><span class="rarity-pill rarity-green">FIELD ESSENTIAL</span><span class="item-stock">∞ AVAILABLE</span></div>
-    <div class="product-art potion-art"><div class="art-spark spark-a">✦</div><div class="art-spark spark-b">✧</div><div class="art-pedestal"></div><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png" alt="Potion" loading="lazy"></div>
-    <div class="product-info"><div class="eyebrow">RECOVERY / ITEM 001</div><h3>POTION</h3><p>A trusty little bottle to restore a quarter of your active Pokémon's HP during battle.</p><div class="product-stat"><span>RESTORE</span><strong>25% HP</strong></div></div>
-    <div class="product-buy"><div class="product-price"><small>PRICE</small><strong>35 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-buy="potion">ADD TO BAG <span>＋</span></button></div>
-   </article>
-   <article class="shop-card market-item-card candy-card">
-    <div class="product-card-top"><span class="rarity-pill rarity-pink">TRAINER FAVOURITE</span><span class="item-stock">∞ AVAILABLE</span></div>
-    <div class="product-art candy-art"><div class="art-spark spark-a">✦</div><div class="art-spark spark-b">✧</div><div class="art-pedestal"></div><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/rare-candy.png" alt="Rare Candy" loading="lazy"></div>
-    <div class="product-info"><div class="eyebrow">TRAINING / ITEM 002</div><h3>XP CANDY S</h3><p>A sweet little boost for the partner you have selected. Perfect before a tough challenge.</p><div class="product-stat"><span>GAIN</span><strong>50 XP</strong></div></div>
-    <div class="product-buy"><div class="product-price"><small>PRICE</small><strong>60 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-buy="candy">POWER UP <span>↗</span></button></div>
-   </article>
-   <article class="shop-card market-item-card ball-card">
-    <div class="product-card-top"><span class="rarity-pill rarity-blue">ADVENTURER GEAR</span><span class="item-stock">∞ AVAILABLE</span></div>
-    <div class="product-art ball-art"><div class="art-spark spark-a">✦</div><div class="art-spark spark-b">✧</div><div class="art-pedestal"></div><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png" alt="Poké Ball" loading="lazy"></div>
-    <div class="product-info"><div class="eyebrow">GEAR / ITEM 003</div><h3>POKÉ BALL</h3><p>A classic piece of trainer gear. Capture mechanics are still on the roadmap, so this is a collection item for now.</p><div class="product-stat"><span>COLLECTION</span><strong>+1 ITEM</strong></div></div>
-    <div class="product-buy"><div class="product-price"><small>PRICE</small><strong>25 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-buy="ball">COLLECT <span>＋</span></button></div>
-   </article>
-  </div>
-  <div id="shop-packs" class="shop-grid market-grid pack-market-grid hidden">
-   <article class="shop-card market-item-card box-card starter-box-card"><div class="product-card-top"><span class="rarity-pill rarity-green">BEGINNER FRIENDLY</span><span class="box-edition">01 / STARTER</span></div><div class="product-art loot-art starter-loot"><div class="loot-rays"></div><div class="lootbox-object"><span class="lootbox-lid"></span><span class="lootbox-base"></span><span class="lootbox-lock">✦</span></div><img class="loot-companion" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="" loading="lazy"></div><div class="product-info"><div class="eyebrow">THE FIRST-PARTNER SERIES</div><h3>STARTER BOX</h3><p>Meet a first-partner Pokémon from any of the nine generations. A little nostalgia, a new adventure.</p><div class="box-detail-row"><span>POOL <b>27 STARTERS</b></span><span>RARITY <b>STARTER</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>180 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="starter">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card box-card basic-box-card"><div class="product-card-top"><span class="rarity-pill rarity-blue">COMMON FINDS</span><span class="box-edition">02 / BASIC</span></div><div class="product-art loot-art basic-loot"><div class="loot-rays"></div><div class="lootbox-object"><span class="lootbox-lid"></span><span class="lootbox-base"></span><span class="lootbox-lock">◈</span></div><img class="loot-companion" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png" alt="" loading="lazy"></div><div class="product-info"><div class="eyebrow">THE NATIONAL DEX SERIES</div><h3>BASIC BOX</h3><p>A surprise from across the National Pokédex. Ideal for filling gaps in your roster and meeting new species.</p><div class="box-detail-row"><span>POOL <b>ALL GENERATIONS</b></span><span>RARITY <b>COMMON</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>120 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="basic">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card box-card rare-box-card"><div class="product-card-top"><span class="rarity-pill rarity-pink">RARE FINDS</span><span class="box-edition">03 / RARE</span></div><div class="product-art loot-art rare-loot"><div class="loot-rays"></div><div class="lootbox-object"><span class="lootbox-lid"></span><span class="lootbox-base"></span><span class="lootbox-lock">✧</span></div><img class="loot-companion" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/149.png" alt="" loading="lazy"></div><div class="product-info"><div class="eyebrow">THE RARE ENCOUNTER SERIES</div><h3>RARE BOX</h3><p>A focused pool of evolved and high-stat Pokémon. More exciting pulls for trainers building a stronger roster.</p><div class="box-detail-row"><span>POOL <b>CURATED</b></span><span>RARITY <b>RARE</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>350 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="rare">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card box-card master-box-card"><div class="product-card-top"><span class="rarity-pill rarity-gold">PREMIUM PULLS</span><span class="box-edition">04 / MASTER</span></div><div class="product-art loot-art master-loot"><div class="loot-rays"></div><div class="lootbox-object"><span class="lootbox-lid"></span><span class="lootbox-base"></span><span class="lootbox-lock">★</span></div><img class="loot-companion" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1007.png" alt="" loading="lazy"></div><div class="product-info"><div class="eyebrow">THE LEGENDARY SERIES</div><h3>MASTER BOX</h3><p>Premium mystery pulls with a chance at legendary or mythical species. Big possibilities, never a guarantee.</p><div class="box-detail-row"><span>POOL <b>WIDE</b></span><span>RARITY <b>MASTER</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>700 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="master">OPEN BOX <span>↗</span></button></div></article>
-   <div class="generation-box-banner"><div class="gen-banner-copy"><div class="eyebrow">REGION-BY-REGION COLLECTION</div><h2>Nine regions.<br>One growing team.</h2><p>Know exactly where your next partner is coming from. Every regional box is locked to its generation.</p><span class="gen-banner-stamp">COLLECT THE WORLD ✦</span></div><div class="gen-banner-art"><span class="gen-orbit gen-orbit-a"></span><span class="gen-orbit gen-orbit-b"></span><span class="gen-crystal">✧</span><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/470.png" alt="" loading="lazy"></div></div>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-green">GENERATION I</span><span class="box-edition">KANTO</span></div><div class="product-art gen-art gen-kanto"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/3.png" alt="" loading="lazy"><span class="gen-dex-number">001—151</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>KANTO BOX</h3><p>From the original region, with classic favourites and familiar faces.</p><div class="box-detail-row"><span>DEX <b>001–151</b></span><span>REGION <b>KANTO</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g1">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-blue">GENERATION II</span><span class="box-edition">JOHTO</span></div><div class="product-art gen-art gen-johto"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/157.png" alt="" loading="lazy"><span class="gen-dex-number">152—251</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>JOHTO BOX</h3><p>Ancient legends, forest trails and beloved second-generation Pokémon.</p><div class="box-detail-row"><span>DEX <b>152–251</b></span><span>REGION <b>JOHTO</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g2">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-pink">GENERATION III</span><span class="box-edition">HOENN</span></div><div class="product-art gen-art gen-hoenn"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/254.png" alt="" loading="lazy"><span class="gen-dex-number">252—386</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>HOENN BOX</h3><p>Volcanic peaks, ocean routes and the Pokémon of Hoenn.</p><div class="box-detail-row"><span>DEX <b>252–386</b></span><span>REGION <b>HOENN</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g3">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-violet">GENERATION IV</span><span class="box-edition">SINNOH</span></div><div class="product-art gen-art gen-sinnoh"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/389.png" alt="" loading="lazy"><span class="gen-dex-number">387—493</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>SINNOH BOX</h3><p>A mountain-region collection filled with evolutionary surprises.</p><div class="box-detail-row"><span>DEX <b>387–493</b></span><span>REGION <b>SINNOH</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g4">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-green">GENERATION V</span><span class="box-edition">UNOVA</span></div><div class="product-art gen-art gen-unova"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/497.png" alt="" loading="lazy"><span class="gen-dex-number">494—649</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>UNOVA BOX</h3><p>A big-city adventure with an entire region of fresh discoveries.</p><div class="box-detail-row"><span>DEX <b>494–649</b></span><span>REGION <b>UNOVA</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g5">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-pink">GENERATION VI</span><span class="box-edition">KALOS</span></div><div class="product-art gen-art gen-kalos"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/652.png" alt="" loading="lazy"><span class="gen-dex-number">650—721</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>KALOS BOX</h3><p>Elegant routes and a colourful collection from Kalos.</p><div class="box-detail-row"><span>DEX <b>650–721</b></span><span>REGION <b>KALOS</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g6">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-gold">GENERATION VII</span><span class="box-edition">ALOLA</span></div><div class="product-art gen-art gen-alola"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/724.png" alt="" loading="lazy"><span class="gen-dex-number">722—809</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>ALOLA BOX</h3><p>Tropical islands, warm waters and an island-wide adventure.</p><div class="box-detail-row"><span>DEX <b>722–809</b></span><span>REGION <b>ALOLA</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g7">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-blue">GENERATION VIII</span><span class="box-edition">GALAR</span></div><div class="product-art gen-art gen-galar"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/815.png" alt="" loading="lazy"><span class="gen-dex-number">810—905</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>GALAR BOX</h3><p>Bold battles and regional discoveries from Galar.</p><div class="box-detail-row"><span>DEX <b>810–905</b></span><span>REGION <b>GALAR</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g8">OPEN BOX <span>↗</span></button></div></article>
-   <article class="shop-card market-item-card generation-card"><div class="product-card-top"><span class="rarity-pill rarity-violet">GENERATION IX</span><span class="box-edition">PALDEA</span></div><div class="product-art gen-art gen-paldea"><img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/908.png" alt="" loading="lazy"><span class="gen-dex-number">906—1025</span></div><div class="product-info"><div class="eyebrow">REGIONAL COLLECTION</div><h3>PALDEA BOX</h3><p>Open-world discoveries and the newest National Pokédex region.</p><div class="box-detail-row"><span>DEX <b>906–1025</b></span><span>REGION <b>PALDEA</b></span></div></div><div class="product-buy"><div class="product-price"><small>PRICE</small><strong>150 <i>◈</i></strong></div><button class="btn shop-buy-btn" data-pack="g9">OPEN BOX <span>↗</span></button></div></article>
-  </div>
-  <div class="market-footer-note"><span class="market-footer-icon">✧</span><p><b>JUST A FRIENDLY REMINDER</b><small>These boxes use in-game coins earned through battles. No real-money purchases or paid lootboxes.</small></p></div>
+ <div id="shop-items" class="shop-grid">
+  <article class="shop-card">
+   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png" alt="Potion" loading="lazy">
+   <div class="eyebrow">Recovery item</div><h3>Potion</h3>
+   <p>Restores 25% of your active Pokémon's maximum HP during battle.</p>
+   <div class="shop-buy"><b>35 ◈</b><button class="btn small" data-buy="potion">Buy</button></div>
+  </article>
+  <article class="shop-card">
+   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/rare-candy.png" alt="XP Candy" loading="lazy">
+   <div class="eyebrow">Training item</div><h3>XP Candy S</h3>
+   <p>Gives your selected Pokémon 50 experience points.</p>
+   <div class="shop-buy"><b>60 ◈</b><button class="btn small" data-buy="candy">Buy</button></div>
+  </article>
+  <article class="shop-card">
+   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png" alt="Poké Ball" loading="lazy">
+   <div class="eyebrow">Trainer gear</div><h3>Poké Ball</h3>
+   <p>A collection item. Capture mechanics are not implemented yet.</p>
+   <div class="shop-buy"><b>25 ◈</b><button class="btn small" data-buy="ball">Buy</button></div>
+  </article>
  </div>
+ <div id="shop-packs" class="shop-grid hidden">
+  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png" alt="" loading="lazy"><div class="eyebrow">27 starter Pokémon</div><h3>Starter Box</h3><p>A random first-partner Pokémon from any of the nine generations.</p><div class="shop-buy"><b>180 ◈</b><button class="btn small" data-pack="starter">Open box</button></div></article>
+  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png" alt="" loading="lazy"><div class="eyebrow">National Pokédex</div><h3>Basic Box</h3><p>A random Pokémon from the National Pokédex range used by this prototype.</p><div class="shop-buy"><b>120 ◈</b><button class="btn small" data-pack="basic">Open box</button></div></article>
+  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/149.png" alt="" loading="lazy"><div class="eyebrow">Curated pool</div><h3>Rare Box</h3><p>A random Pokémon from a selected evolved and high-stat pool.</p><div class="shop-buy"><b>350 ◈</b><button class="btn small" data-pack="rare">Open box</button></div></article>
+  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1007.png" alt="" loading="lazy"><div class="eyebrow">Premium pool</div><h3>Master Box</h3><p>Has a chance to give a legendary or mythical Pokémon.</p><div class="shop-buy"><b>700 ◈</b><button class="btn small" data-pack="master">Open box</button></div></article>
+  <article class="shop-card"><h3>Kanto Box</h3><p>Pokédex entries 1–151.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g1">Open box</button></div></article>
+  <article class="shop-card"><h3>Johto Box</h3><p>Pokédex entries 152–251.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g2">Open box</button></div></article>
+  <article class="shop-card"><h3>Hoenn Box</h3><p>Pokédex entries 252–386.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g3">Open box</button></div></article>
+  <article class="shop-card"><h3>Sinnoh Box</h3><p>Pokédex entries 387–493.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g4">Open box</button></div></article>
+  <article class="shop-card"><h3>Unova Box</h3><p>Pokédex entries 494–649.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g5">Open box</button></div></article>
+  <article class="shop-card"><h3>Kalos Box</h3><p>Pokédex entries 650–721.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g6">Open box</button></div></article>
+  <article class="shop-card"><h3>Alola Box</h3><p>Pokédex entries 722–809.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g7">Open box</button></div></article>
+  <article class="shop-card"><h3>Galar Box</h3><p>Pokédex entries 810–905.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g8">Open box</button></div></article>
+  <article class="shop-card"><h3>Paldea Box</h3><p>Pokédex entries 906–1025.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g9">Open box</button></div></article>
+ </div>
+ <p class="fine-print">All purchases use in-game coins. No real-money purchases are available.</p>
 </section>
 
 <section id="page-dex" class="page">
@@ -132,7 +135,7 @@
  <div class="battle-screen">
   <div class="battle-top"><button class="text-btn" id="leaveBattle">← FORFEIT</button><span class="eyebrow" id="battleLabel">DAILY BATTLE / EASY</span><span class="muted" id="battleTurn">TURN 01</span></div>
   <div class="battlefield" id="battlefield">
-   <div class="scene-light"></div><div class="scene-ridge"></div><div class="scene-forest"></div><div class="scene-canopy"></div><div class="terrain"></div><div class="battle-platform enemy-platform"></div><div class="battle-platform player-platform"></div><div class="battle-bg-grid"></div>
+   
    <div class="enemy-status status-box"><div class="status-name"><b id="enemyName">RIVAL'S POKÉMON</b><span id="enemyLevel">Lv. 8</span></div><div class="hpbar"><i id="enemyHpBar"></i></div><small><span id="enemyHpText">100/100</span> HP</small></div>
    <img id="enemySprite" class="battle-sprite enemy-sprite" alt="Opponent">
    <div class="player-status status-box"><div class="status-name"><b id="playerName">YOUR POKÉMON</b><span id="playerLevel">Lv. 10</span></div><div class="hpbar"><i id="playerHpBar"></i></div><small><span id="playerHpText">100/100</span> HP</small><div class="xp-mini"><i id="battleXpBar"></i></div></div>
