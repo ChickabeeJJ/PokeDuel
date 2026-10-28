@@ -15,6 +15,7 @@ const REGION_NAMES = {1:'KANTO',2:'JOHTO',3:'HOENN',4:'SINNOH',5:'UNOVA',6:'KALO
 const GEN_ROMAN = {1:'I',2:'II',3:'III',4:'IV',5:'V',6:'VI',7:'VII',8:'VIII',9:'IX'};
 const STARTERS = Object.values(STARTERS_BY_GEN).flat();
 let selectedStarterId = null;
+let selectedStarterInfo = null;
 let activeStarterGen = 1;
 const ENEMY_POOLS = {
  easy:[16,19,10,13,25,39,41,43,46,48,52,54,56,60,66,69,72,74,90,98],
@@ -136,14 +137,16 @@ function updateStarterSelectionSummary(){
  const summary=$('#chosenSummary');if(!summary)return;
  if(!valid){summary.innerHTML='<span class="chosen-empty">✦</span><span><b>YOUR PARTNER</b><small>Pick a Pokémon above</small></span>';return}
  const card=$('#onboardStarterGrid [data-pick-starter="'+pId+'"]');
- let name=card?.querySelector('.partner-name')?.textContent||'Partner selected';
- let type=card?.querySelector('.type')?.textContent||'';
- let pImage=card?.querySelector('img')?.src||'';
+ let name=card?.querySelector('.partner-name')?.textContent||selectedStarterInfo?.name||'Partner selected';
+ let type=card?.querySelector('.type')?.textContent||selectedStarterInfo?.type||'';
+ let pImage=card?.querySelector('img')?.src||selectedStarterInfo?.image||'';
  summary.innerHTML=(pImage?'<img src="'+escAttr(pImage)+'" alt="">':'<span class="chosen-empty">✦</span>')+'<span><b>'+esc(name)+'</b><small>LEVEL 10 · '+esc(type.toUpperCase())+' TYPE</small></span>';
 }
 function selectStarter(id){
  const gen=Number(Object.keys(STARTERS_BY_GEN).find(g=>STARTERS_BY_GEN[g].includes(Number(id))));
  if(!gen)return;selectedStarterId=Number(id);
+ const selectedCard=$('#onboardStarterGrid [data-pick-starter="'+selectedStarterId+'"]');
+ if(selectedCard)selectedStarterInfo={name:selectedCard.querySelector('.partner-name')?.textContent||'Partner selected',type:selectedCard.querySelector('.type')?.textContent||'',image:selectedCard.querySelector('img')?.src||''};
  if(gen!==activeStarterGen){activeStarterGen=gen;renderStarterSelection();return}
  $('#onboardStarterGrid [data-pick-starter]').forEach(card=>{const selected=Number(card.dataset.pickStarter)===selectedStarterId;card.classList.toggle('selected',selected);const action=card.querySelector('.partner-choose');if(action)action.textContent=selected?'✓ YOUR PARTNER':'CHOOSE PARTNER'});
  updateStarterSelectionSummary();
@@ -217,7 +220,7 @@ const GEN_RANGES={g1:[1,151],g2:[152,251],g3:[252,386],g4:[387,493],g5:[494,649]
 const RARE_POOL=[6,9,18,34,38,45,59,62,65,68,94,103,130,131,134,142,149,154,157,160,181,196,197,208,212,214,230,248,257,260,282,303,306,334,350,373,376,405,448,464,475,487,493,530,609,635,658,681,700,715,724,738,745,778,791,792,887,889,908,911,920,937,998,1000,1007,1017,1024,1025];
 const LEGENDARY_POOL=[144,145,146,150,151,243,244,245,249,250,251,377,378,379,380,381,382,383,384,385,386,480,481,482,483,484,487,488,489,490,491,492,493,638,639,640,641,642,643,644,645,646,647,648,649,716,717,718,772,773,785,786,787,788,789,790,791,792,800,801,802,807,808,809,888,889,890,891,892,893,894,895,896,897,898,905,1001,1002,1003,1004,1007,1008,1009,1010,1014,1015,1016,1017,1020,1021,1022,1023];
 function packConfig(kind){
- if(kind==='starter')return {label:'STARTER BOX',price:180,odds:[['Kanto starter',100]],pick:()=>randomChoice(STARTERS)};
+ if(kind==='starter')return {label:'STARTER BOX',price:180,odds:[['Starter Pokémon from any generation',100]],pick:()=>randomChoice(STARTERS)};
  if(kind==='basic')return {label:'BASIC BOX',price:120,odds:[['Pokémon from the National Pokédex',100]],pick:()=>1+Math.floor(Math.random()*1025)};
  if(kind==='rare')return {label:'RARE BOX',price:350,odds:[['Evolved / high-stat Pokémon pool',100]],pick:()=>randomChoice(RARE_POOL)};
  if(kind==='master')return {label:'MASTER BOX',price:700,odds:[['Legendary or Mythical pool',40],['Rare / evolved pool',40],['Any National Dex species',20]],pick:()=>{const r=Math.random();return r<.4?randomChoice(LEGENDARY_POOL):r<.8?randomChoice(RARE_POOL):1+Math.floor(Math.random()*1025)}};
