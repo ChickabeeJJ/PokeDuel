@@ -27,3 +27,41 @@ footer{display:flex;justify-content:space-between;align-items:center;gap:20px;pa
 .battlefield.theme-night{background:linear-gradient(#152c51 0%,#273f6c 37%,#596d83 37.5%,#637b67 43%,#374b4d 65%,#111f30 100%)}
 .battlefield.theme-night:after{content:"";position:absolute;top:7%;right:9%;width:43px;height:43px;border-radius:50%;background:#e0f3f9;box-shadow:0 0 22px #b9f7ff75;z-index:1}
 .battlefield.theme-night:before{background:#7b91aa;opacity:.55}
+
+/* Original HD-2D inspired battle scenery: layered foliage, terrain, arena discs and lighting. */
+.battlefield{isolation:isolate;background:linear-gradient(#a5dff1 0%,#e4f4e5 39%,#c7dfa1 40%,#7dae6b 68%,#2f594c 100%)}
+.battlefield .scene-light{position:absolute;z-index:0;inset:0;background:radial-gradient(ellipse at 72% 16%,#fff4c7c7 0 7%,#fff3c500 28%),radial-gradient(ellipse at 35% 54%,#f2ffd377 0 4%,transparent 53%),linear-gradient(118deg,#ffffff35,transparent 58%);pointer-events:none}
+.battlefield .scene-ridge{position:absolute;z-index:0;left:-4%;right:-4%;top:24%;height:38%;background:linear-gradient(180deg,#8fba9a,#467969);clip-path:polygon(0 73%,8% 40%,14% 59%,23% 17%,32% 47%,43% 7%,56% 40%,69% 13%,79% 44%,88% 20%,100% 53%,100% 100%,0 100%);filter:drop-shadow(0 5px 2px #244b4360)}
+.battlefield .scene-forest{position:absolute;z-index:1;top:23%;left:-2%;right:-2%;height:38%;opacity:.92;background:repeating-linear-gradient(90deg,transparent 0 13px,#204d37 14px 25px,transparent 26px 36px),radial-gradient(ellipse at 9% 15%,#164a35 0 13%,transparent 14%),radial-gradient(ellipse at 22% 26%,#276341 0 15%,transparent 16%),radial-gradient(ellipse at 42% 12%,#24633c 0 14%,transparent 15%),radial-gradient(ellipse at 68% 20%,#1b563b 0 17%,transparent 18%),radial-gradient(ellipse at 90% 16%,#245b3a 0 16%,transparent 17%);clip-path:polygon(0 0,100% 0,100% 60%,91% 54%,83% 76%,75% 60%,65% 74%,56% 55%,47% 75%,37% 59%,27% 78%,18% 56%,8% 74%,0 58%);filter:drop-shadow(0 7px 2px #18382a66)}
+.battlefield .scene-canopy{position:absolute;z-index:1;top:-8%;left:-5%;right:-5%;height:27%;opacity:.72;background:radial-gradient(ellipse at 0% 0%,#123f2b 0 24%,transparent 25%),radial-gradient(ellipse at 20% 0%,#1a5633 0 25%,transparent 26%),radial-gradient(ellipse at 43% 0%,#225f39 0 24%,transparent 25%),radial-gradient(ellipse at 65% 0%,#17472d 0 25%,transparent 26%),radial-gradient(ellipse at 88% 0%,#1b5030 0 26%,transparent 27%);filter:blur(1px)}
+.battlefield .terrain{z-index:2;bottom:-21%;height:60%;background:radial-gradient(ellipse at 20% 18%,#a5d17a 0 13%,transparent 13.5%),radial-gradient(ellipse at 65% 8%,#8fbd6c 0 17%,transparent 17.5%),radial-gradient(ellipse at 86% 30%,#729e5c 0 18%,transparent 18.5%),radial-gradient(ellipse at 48% 26%,#b5cf7a 0 8%,transparent 8.5%),linear-gradient(180deg,#74a65f,#356449 55%,#1b3d3e 100%);clip-path:polygon(0 4%,14% 0,27% 10%,45% 2%,64% 12%,81% 1%,100% 8%,100% 100%,0 100%);border-top:3px solid #b7d98b;filter:drop-shadow(0 -6px 7px #163c2a55)}
+.battlefield .battle-platform{position:absolute;z-index:2;transform:perspective(240px) rotateX(18deg);border-radius:50%;pointer-events:none}
+.battlefield .enemy-platform{width:39%;height:19%;top:45%;right:13%;background:radial-gradient(ellipse at 48% 34%,#a8cb86 0 35%,#65975c 68%,#355c4d 100%);border:3px solid #457451;box-shadow:0 12px 2px #183d3699,inset 0 -9px #224d3f4d}
+.battlefield .player-platform{width:53%;height:24%;bottom:4%;left:4%;background:radial-gradient(ellipse at 48% 30%,#b9dc91 0 32%,#80b16b 63%,#477a53 100%);border:4px solid #629957;box-shadow:0 12px 3px #123b3999,inset 0 -10px #2f644a55}
+.battlefield .battle-bg-grid{z-index:0;opacity:.33;background:repeating-linear-gradient(0deg,transparent 0 3px,#d7ffe01a 4px),linear-gradient(110deg,#ffffff25,transparent 43%,#173c3830)}
+.battlefield .battle-sprite{z-index:3;filter:drop-shadow(2px 3px 0 #18372b5f) drop-shadow(0 9px 7px #193a2c44)}
+.battlefield .enemy-status,.battlefield .player-status{z-index:5;background:linear-gradient(135deg,#fffdf4,#d9dedb);border:3px solid #d94b51;box-shadow:4px 4px 0 #5d353a;clip-path:polygon(0 0,100% 0,100% 78%,92% 100%,0 100%);padding:10px 13px}
+.battlefield .status-name{color:#24353e}
+.battlefield .hpbar{background:#86918c;border:1px solid #475c5a}
+.battlefield .hpbar i{box-shadow:inset 0 1px #ffffff55}
+.battlefield .status-box small{color:#283c43}
+.battlefield.theme-fire .scene-ridge{background:linear-gradient(#f0c29a,#bd805f)}
+.battlefield.theme-fire .scene-forest{opacity:.55;background:repeating-linear-gradient(90deg,transparent 0 25px,#754b3a 26px 44px,transparent 45px 56px),radial-gradient(ellipse at 18% 20%,#995a3d 0 14%,transparent 15%),radial-gradient(ellipse at 65% 10%,#ae6946 0 18%,transparent 19%)}
+.battlefield.theme-fire .scene-canopy{display:none}
+.battlefield.theme-fire .terrain{background:radial-gradient(ellipse at 20% 12%,#efc88a 0 18%,transparent 18.5%),linear-gradient(180deg,#c88d57,#87533d 62%,#442e33)}
+.battlefield.theme-fire .enemy-platform{background:radial-gradient(ellipse,#d9b477,#a56a46 70%,#70493c)}
+.battlefield.theme-fire .player-platform{background:radial-gradient(ellipse,#f1cb82,#b87d4c 70%,#794739)}
+.battlefield.theme-water .scene-ridge{background:linear-gradient(#add9db,#5eacb4)}
+.battlefield.theme-water .scene-forest{opacity:.48;background:repeating-linear-gradient(90deg,transparent 0 25px,#2c7777 26px 38px,transparent 39px 51px),radial-gradient(ellipse at 18% 20%,#3d9990 0 17%,transparent 18%),radial-gradient(ellipse at 67% 16%,#2c827d 0 21%,transparent 22%)}
+.battlefield.theme-water .scene-canopy{display:none}
+.battlefield.theme-water .terrain{background:radial-gradient(ellipse at 25% 10%,#a2d9be 0 16%,transparent 16.5%),linear-gradient(180deg,#84c4a1,#398c91 58%,#174e65)}
+.battlefield.theme-water .enemy-platform{background:radial-gradient(ellipse,#bcdfae,#6cb8a0 70%,#2f7779)}
+.battlefield.theme-water .player-platform{background:radial-gradient(ellipse,#d1e8b1,#73b78e 70%,#377b72)}
+.battlefield.theme-night .scene-light{background:radial-gradient(ellipse at 83% 11%,#c8e8ff5c 0 7%,transparent 27%),linear-gradient(120deg,#10244442,transparent 50%)}
+.battlefield.theme-night .scene-ridge{background:linear-gradient(#5c7091,#293b50)}
+.battlefield.theme-night .scene-forest{opacity:.98;filter:brightness(.45);background:repeating-linear-gradient(90deg,transparent 0 13px,#112d2c 14px 25px,transparent 26px 36px),radial-gradient(ellipse at 9% 15%,#164a35 0 13%,transparent 14%),radial-gradient(ellipse at 22% 26%,#276341 0 15%,transparent 16%),radial-gradient(ellipse at 42% 12%,#24633c 0 14%,transparent 15%),radial-gradient(ellipse at 68% 20%,#1b563b 0 17%,transparent 18%),radial-gradient(ellipse at 90% 16%,#245b3a 0 16%,transparent 17%)}
+.battlefield.theme-night .scene-canopy{filter:brightness(.45)}
+.battlefield.theme-night .terrain{background:radial-gradient(ellipse at 20% 18%,#637d68 0 13%,transparent 13.5%),linear-gradient(180deg,#425e4c,#1e353c 65%,#0b1c2c)}
+.battlefield.theme-night .enemy-platform{background:radial-gradient(ellipse,#778a81,#415e58 70%,#243f3d)}
+.battlefield.theme-night .player-platform{background:radial-gradient(ellipse,#819b82,#3b6a5a 70%,#1c4545)}
+@media(max-width:700px){.battlefield .enemy-platform{width:42%;right:5%;top:46%}.battlefield .player-platform{width:59%;left:-2%;bottom:3%}}
