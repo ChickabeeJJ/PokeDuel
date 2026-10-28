@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1525">
+<title>PokeDuel — The Daily Battle</title>
+<meta name="description" content="Build your team, train your Pokémon, and take on three daily battles in PokeDuel.">
+<link rel="preconnect" href="https://raw.githubusercontent.com">
+<link rel="preconnect" href="https://pokeapi.co">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="scanlines"></div>
+<header class="topbar">
+  <a class="brand" href="#" aria-label="PokeDuel home"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a>
+  <nav><button class="navlink active" data-page="home">HOME</button><button class="navlink" data-page="team">MY TEAM</button><button class="navlink" data-page="shop">SHOP</button><button class="navlink" data-page="dex">DEX</button></nav>
+  <div class="wallet"><span>◈ <b id="coins">250</b></span><button class="profile" id="profileBtn" title="Profile">♂</button></div>
+</header>
+<main>
+<section id="page-home" class="page active">
+  <div class="hero">
+    <div class="hero-copy"><div class="eyebrow"><i></i> DAILY CHALLENGE <span id="todayLabel"></span></div>
+    <h1>YOUR NEXT<br><em>RIVAL</em> AWAITS.</h1>
+    <p>Three battles. One team. Every day is a new test of your strategy.</p>
+    <div class="hero-actions"><button class="btn primary" data-page="team">BUILD YOUR TEAM <span>↗</span></button><button class="btn ghost" id="quickBattle">QUICK PRACTICE</button></div>
+    <div class="hero-stats"><div><b>1,025+</b><small>SPECIES TO DISCOVER</small></div><div><b>03</b><small>DAILY BATTLES</small></div><div><b>∞</b><small>PRACTICE RUNS</small></div></div></div>
+    <div class="hero-art"><div class="sun-disc"></div><div class="orbit orbit1"></div><div class="orbit orbit2"></div><img id="heroPokemon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png" alt="Charizard" onerror="this.style.display='none'"><span class="art-label">NO. 006 // FLAME</span><span class="art-corner">PD / 001</span></div>
+  </div>
+  <section class="section-heading"><div><div class="eyebrow">TODAY'S GAUNTLET</div><h2>THE DAILY THREE</h2></div><span class="muted" id="dailyProgress">0 / 3 CLEARED</span></section>
+  <div class="battle-grid">
+    <article class="battle-card easy"><div class="card-top"><span class="difficulty">01 / EASY</span><span class="status" id="status-easy">AVAILABLE</span></div><div class="arena-sigil">Ⅰ</div><h3>WARM-UP</h3><p>A friendly opening bout. Get your bearings and collect your first reward.</p><div class="card-bottom"><span>REWARD <b>+80 XP · 40 ◈</b></span><button class="btn small" data-battle="easy">BATTLE →</button></div></article>
+    <article class="battle-card medium"><div class="card-top"><span class="difficulty">02 / MEDIUM</span><span class="status" id="status-medium">AVAILABLE</span></div><div class="arena-sigil">Ⅱ</div><h3>RIVAL TEST</h3><p>A tougher opponent with smarter coverage. Bring a balanced team.</p><div class="card-bottom"><span>REWARD <b>+160 XP · 75 ◈</b></span><button class="btn small" data-battle="medium">BATTLE →</button></div></article>
+    <article class="battle-card hard"><div class="card-top"><span class="difficulty">03 / HARD</span><span class="status" id="status-hard">AVAILABLE</span></div><div class="arena-sigil">Ⅲ</div><h3>ACE CHALLENGE</h3><p>The day's final trial. Expect strong moves and no free turns.</p><div class="card-bottom"><span>REWARD <b>+300 XP · 150 ◈</b></span><button class="btn small" data-battle="hard">BATTLE →</button></div></article>
+  </div>
+  <div class="lower-grid"><article class="panel continue-panel"><div class="panel-head"><span>YOUR JOURNEY</span><span class="muted">TRAINER RECORD</span></div><div class="journey-row"><img id="starterThumb" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png" alt=""><div><h3 id="homeStarter">Pikachu</h3><p id="homeLevel">Lv. 10 · Starter Pokémon</p><div class="xp-track"><i id="homeXp"></i></div></div><button class="text-btn" data-page="team">VIEW TEAM ↗</button></div></article>
+  <article class="panel practice-panel"><div class="panel-head"><span>OFF THE CLOCK</span><span class="pill">NO LIMIT</span></div><h3>Practice arena</h3><p>Train at your own pace. Lower XP and coin rewards, no daily limit.</p><button class="btn ghost full" id="practiceBtn">ENTER PRACTICE ARENA →</button></article></div>
+</section>
+
+<section id="page-team" class="page">
+  <div class="page-title"><div class="eyebrow">YOUR COLLECTION</div><h1>MY <em>TEAM</em></h1><p>Pick your starter, train your roster, and prepare for the daily gauntlet.</p></div>
+  <div id="starterPrompt" class="panel starter-prompt"><div class="eyebrow">FIRST THINGS FIRST</div><h2>CHOOSE YOUR STARTER</h2><p>Your journey begins with one partner. Every starter joins at level 10.</p><div class="starter-grid" id="starterGrid"></div></div>
+  <div id="rosterSection" class="panel"><div class="panel-head"><span>ACTIVE ROSTER</span><span class="muted" id="teamCount">0 / 6 PARTY</span></div><div class="roster-grid" id="rosterGrid"></div><div class="roster-note">Tip: type matchups, status effects, and move coverage matter more than raw level.</div></div>
+</section>
+
+<section id="page-shop" class="page">
+ <div class="page-title"><div class="eyebrow">SUPPLY DEPOT</div><h1>THE <em>SHOP</em></h1><p>Spend battle coins on training items and mystery Pokémon packs.</p></div>
+ <div class="shop-tabs"><button class="tab active" data-shop="items">ITEMS</button><button class="tab" data-shop="packs">POKÉMON PACKS</button></div>
+ <div id="shop-items" class="shop-grid">
+  <article class="shop-card"><div class="item-art">✚</div><div class="eyebrow">HEALING</div><h3>POTION</h3><p>Restores 20 HP during battle.</p><div class="shop-buy"><b>35 ◈</b><button class="btn small" data-buy="potion">BUY</button></div></article>
+  <article class="shop-card"><div class="item-art">✦</div><div class="eyebrow">TRAINING</div><h3>XP CANDY S</h3><p>Gives your selected Pokémon 50 XP.</p><div class="shop-buy"><b>60 ◈</b><button class="btn small" data-buy="candy">BUY</button></div></article>
+  <article class="shop-card"><div class="item-art">◉</div><div class="eyebrow">CAPTURE GEAR</div><h3>POKÉ BALL</h3><p>A classic ball for your collection. (Collection packs are below.)</p><div class="shop-buy"><b>25 ◈</b><button class="btn small" data-buy="ball">BUY</button></div></article>
+ </div>
+ <div id="shop-packs" class="shop-grid hidden">
+  <article class="shop-card pack"><div class="pack-ribbon">GEN I</div><div class="pack-art">◈</div><div class="eyebrow">COMMON · KANTO</div><h3>STARTER PACK</h3><p>A Kanto starter or familiar early-route Pokémon. Guaranteed species.</p><div class="shop-buy"><b>180 ◈</b><button class="btn small" data-pack="starter">OPEN PACK</button></div></article>
+  <article class="shop-card pack"><div class="pack-ribbon blue">GEN I–III</div><div class="pack-art">✧</div><div class="eyebrow">UNCOMMON</div><h3>EXPEDITION PACK</h3><p>Discover species from the first three regions, including evolved Pokémon.</p><div class="shop-buy"><b>350 ◈</b><button class="btn small" data-pack="expedition">OPEN PACK</button></div></article>
+  <article class="shop-card pack"><div class="pack-ribbon gold">ALL ERAS</div><div class="pack-art">✹</div><div class="eyebrow">RARE · SPECIAL</div><h3>MASTER PACK</h3><p>A higher-tier roll across all available species and forms.</p><div class="shop-buy"><b>700 ◈</b><button class="btn small" data-pack="master">OPEN PACK</button></div></article>
+ </div>
+ <p class="fine-print">Pack odds are shown before opening. This prototype uses in-game coins only; no real-money purchases.</p>
+</section>
+
+<section id="page-dex" class="page">
+ <div class="page-title"><div class="eyebrow">FIELD GUIDE</div><h1>THE <em>DEX</em></h1><p>Search Pokémon species and inspect their official artwork.</p></div>
+ <div class="dex-search"><input id="dexQuery" placeholder="Search by name or Pokédex number…" autocomplete="off"><button class="btn primary" id="dexSearch">SEARCH</button></div>
+ <div id="dexResults" class="dex-grid"></div><div class="load-more"><button class="btn ghost" id="loadMore">LOAD MORE SPECIES ↓</button></div>
+</section>
+
+<section id="page-battle" class="page">
+ <div class="battle-screen">
+  <div class="battle-top"><button class="text-btn" id="leaveBattle">← FORFEIT</button><span class="eyebrow" id="battleLabel">DAILY BATTLE / EASY</span><span class="muted" id="battleTurn">TURN 01</span></div>
+  <div class="battlefield" id="battlefield">
+   <div class="battle-bg-grid"></div><div class="terrain"></div>
+   <div class="enemy-status status-box"><div class="status-name"><b id="enemyName">RIVAL'S POKÉMON</b><span id="enemyLevel">Lv. 8</span></div><div class="hpbar"><i id="enemyHpBar"></i></div><small><span id="enemyHpText">100/100</span> HP</small></div>
+   <img id="enemySprite" class="battle-sprite enemy-sprite" alt="Opponent">
+   <div class="player-status status-box"><div class="status-name"><b id="playerName">YOUR POKÉMON</b><span id="playerLevel">Lv. 10</span></div><div class="hpbar"><i id="playerHpBar"></i></div><small><span id="playerHpText">100/100</span> HP</small><div class="xp-mini"><i id="battleXpBar"></i></div></div>
+   <img id="playerSprite" class="battle-sprite player-sprite" alt="Your Pokémon">
+   <div id="battleFlash" class="battle-flash"></div>
+  </div>
+  <div class="battle-console"><div id="battleLog" class="battle-log" aria-live="polite">A challenger approaches!</div><div class="battle-controls" id="battleControls"><button class="move-btn" data-move="0"><span>01</span><b>—</b><small>—</small></button><button class="move-btn" data-move="1"><span>02</span><b>—</b><small>—</small></button><button class="move-btn" data-move="2"><span>03</span><b>—</b><small>—</small></button><button class="move-btn" data-move="3"><span>04</span><b>—</b><small>—</small></button><button class="move-btn bag-btn" id="bagBtn"><span>＋</span><b>BAG</b><small id="potionCount">POTION × 0</small></button><button class="move-btn switch-btn" id="switchBtn"><span>⇄</span><b>SWITCH</b><small>PARTY</small></button></div></div>
+ </div>
+</section>
+
+<section id="page-profile" class="page"><div class="page-title"><div class="eyebrow">TRAINER CARD</div><h1>YOUR <em>RECORD</em></h1></div><div class="panel profile-panel"><div class="profile-emblem">PD</div><div><h2 id="profileName">ROOKIE TRAINER</h2><p id="profileStats">Battles won: 0 · Species caught: 0</p><p class="muted">Google sign-in will be connected after the game foundation is ready. Your current save is local to this browser.</p></div></div><div class="panel"><div class="panel-head"><span>SETTINGS</span></div><label class="setting-row"><span>Battle animations</span><input type="checkbox" id="animationsToggle" checked></label><label class="setting-row"><span>Reduce screen effects</span><input type="checkbox" id="effectsToggle"></label><button id="resetSave" class="btn danger">RESET LOCAL SAVE</button></div></section>
+
+<section id="page-privacy" class="page">
+ <div class="page-title"><div class="eyebrow">THE BORING BUT IMPORTANT PART</div><h1>PRIVACY <em>POLICY</em></h1><p>Last updated: 28 October 2026</p></div>
+ <article class="panel legal-copy"><h2>1. About this prototype</h2><p>PokeDuel is a fan-made, non-commercial Pokémon battle game prototype. It is not affiliated with, endorsed by, or connected to Nintendo, The Pokémon Company, Game Freak, or any official Pokémon product.</p><h2>2. Information we store</h2><p>In this prototype, your team, coins, items, and progress are stored in your browser's local storage. This information stays on this device and is not sent to a PokeDuel account server. Clearing browser site data or using another browser may erase or separate your save.</p><h2>3. Third-party services</h2><p>The game may request species and sprite data from PokéAPI and its public sprite repository. Those services may receive standard connection information, such as your IP address, when your browser requests assets. Their own privacy terms apply. Battle backgrounds in this prototype are original CSS-generated scenery; external images may be added only where the source and usage rights permit.</p><h2>4. Google sign-in</h2><p>Google sign-in is not enabled in this build. If implemented, the privacy policy must be updated to explain what account details are collected, how authentication works, what is stored, and how account data can be deleted before sign-in is made available.</p><h2>5. Children and accounts</h2><p>Do not submit sensitive personal information. No user account, chat, or public profile service is active in this prototype.</p><h2>6. Changes and contact</h2><p>This notice may change as the project develops. No dedicated support email has been configured for this prototype.</p><p class="fine-print">This starter policy is informational and is not legal advice. Review it and replace placeholders with actual service, operator, and contact details before public launch.</p></article>
+</section>
+</main>
+<footer><a class="brand mini-brand" href="#"><span class="brand-mark">PD</span><span>POKEDUEL<small>UNOFFICIAL FAN PROJECT</small></span></a><div class="footer-links"><button data-page="privacy">PRIVACY POLICY</button><a href="https://pokeapi.co/" target="_blank" rel="noreferrer">POKÉAPI</a><span>© FAN-MADE PROJECT</span></div></footer>
+
+<div class="modal-backdrop hidden" id="modal"><div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="Close">×</button><div id="modalContent"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
