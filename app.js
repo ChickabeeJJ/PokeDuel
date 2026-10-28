@@ -6,7 +6,16 @@ const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprite
 const STORAGE_KEY = 'pokeduel-save-v1';
 const DAILY = ['easy','medium','hard'];
 const REWARDS = {easy:{xp:80,coins:40,level:8},medium:{xp:160,coins:75,level:12},hard:{xp:300,coins:150,level:16},practice:{xp:28,coins:12,level:10}};
-const STARTERS = [1,4,7];
+const STARTERS_BY_GEN = {
+  1:[1,4,7], 2:[152,155,158], 3:[252,255,258],
+  4:[387,390,393], 5:[495,498,501], 6:[650,653,656],
+  7:[722,725,728], 8:[810,813,816], 9:[906,909,912]
+};
+const REGION_NAMES = {1:'KANTO',2:'JOHTO',3:'HOENN',4:'SINNOH',5:'UNOVA',6:'KALOS',7:'ALOLA',8:'GALAR',9:'PALDEA'};
+const GEN_ROMAN = {1:'I',2:'II',3:'III',4:'IV',5:'V',6:'VI',7:'VII',8:'VIII',9:'IX'};
+const STARTERS = Object.values(STARTERS_BY_GEN).flat();
+let selectedStarterId = null;
+let activeStarterGen = 1;
 const ENEMY_POOLS = {
  easy:[16,19,10,13,25,39,41,43,46,48,52,54,56,60,66,69,72,74,90,98],
  medium:[37,58,63,66,79,92,104,109,133,147,161,163,179,187,194,198,200,215,220,228,236,239,240,252,255,258,261,263,270,273,280,283,290,300,304,307,311,312],
@@ -89,7 +98,7 @@ function checkNewDay(){const key=todayKey();if(save.dailyDate!==key){save.dailyD
 function pageTo(name){activePage=name;$$('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));$$('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));window.scrollTo({top:0,behavior:save.settings.reducedEffects?'auto':'smooth'});if(name==='home')renderHome();if(name==='team')renderTeam();if(name==='profile')renderProfile();if(name==='dex'&&!dexLoaded.length)loadDex(true)}
 function updateHomeStarter(){const e=chosen();if(e){$('#homeStarter').textContent=cap(e.name);$('#homeLevel').textContent='Lv. '+e.level+' · '+(e.level>=100?'MAX LEVEL':'Starter / Party Pokémon');$('#starterThumb').src=SPRITES+'/'+e.pokemonId+'.png';$('#homeXp').style.width=(e.level>=100?100:Math.min(100,e.xp/xpNeeded(e.level)*100))+'%'}else{$('#homeStarter').textContent='Choose your starter';$('#homeLevel').textContent='Your adventure begins here';$('#starterThumb').src=SPRITES+'/25.png';$('#homeXp').style.width='0%'}}
 function renderHome(){updateHeader();updateHomeStarter();const has=save.starterChosen;$$('[data-battle]').forEach(b=>{b.disabled=!has||!!save.daily[b.dataset.battle];b.style.opacity=b.disabled?'.45':'1'});$('#quickBattle').disabled=!has;$('#practiceBtn').disabled=!has;$('#dailyProgress').textContent=DAILY.filter(k=>save.daily[k]).length+' / 3 CLEARED'}
-async function renderTeam(){const prompt=$('#starterPrompt'),roster=$('#rosterSection');prompt.classList.toggle('hidden',save.starterChosen);roster.classList.toggle('hidden',!save.starterChosen);$('#teamCount').textContent=save.party.length+' / 6 PARTY';if(!save.starterChosen){$('#starterGrid').innerHTML='<div class="empty-state">Loading starter Pokémon…</div>';try{const starters=await Promise.all(STARTERS.map(getPokemon));$('#starterGrid').innerHTML=starters.map(p=>{const typ=getTypes(p)[0]||'normal';return '<article class="starter-card"><img src="'+escAttr(pickSprite(p))+'" alt="'+escAttr(cap(p.name))+'"><div><h3>'+esc(cap(p.name))+'</h3><span>'+cap(typ)+' TYPE · LV. 10</span></div><button class="btn primary" data-starter="'+p.id+'">CHOOSE →</button></article>'}).join('')}catch(e){$('#starterGrid').innerHTML='<div class="empty-state">PokéAPI could not load right now. Check your connection and try again.</div>'}return}
+async function renderTeam(){const prompt=$('#starterPrompt'),roster=$('#rosterSection');if(prompt)prompt.classList.add('hidden');if(roster)roster.classList.toggle('hidden',!save.starterChosen);$('#teamCount').textContent=save.party.length+' / 6 PARTY';if(!save.starterChosen){pageTo('starter');return}
 if(!save.party.length){save.starterChosen=false;persist();renderTeam();return}
 const cards=await Promise.all(save.party.map(async e=>{let p;try{p=await getPokemon(e.pokemonId)}catch(err){p={name:e.name,id:e.pokemonId,types:[{type:{name:'normal'},slot:1}],stats:[],sprites:{front_default:SPRITES+'/'+e.pokemonId+'.png'}}}
  const types=getTypes(p),active=save.selectedId===e.uid,st=statsFrom(p);return '<article class="pokemon-card" data-uid="'+escAttr(e.uid)+'"><img loading="lazy" src="'+escAttr(pickSprite(p))+'" alt="'+escAttr(cap(e.name))+'"><h3>'+esc(cap(e.name))+(active?' <span style="color:var(--cyan)">◆</span>':'')+'</h3><p>NO. '+String(e.pokemonId).padStart(3,'0')+' · LV. '+e.level+'</p><div class="types">'+types.map(t=>'<span class="type '+t+'">'+t+'</span>').join('')+'</div><div class="mini-bar"><i style="width:'+Math.min(100, e.level/100*100)+'%"></i></div><p style="margin-top:7px">XP '+e.xp+' / '+(e.level>=100?'MAX':xpNeeded(e.level))+'</p><div class="card-actions"><button class="btn '+(active?'primary':'ghost')+'" data-select="'+escAttr(e.uid)+'">'+(active?'ACTIVE':'SELECT')+'</button>'+(save.party.length>1?'<button class="btn ghost" data-release="'+escAttr(e.uid)+'">RELEASE</button>':'')+'</div></article>'}));$('#rosterGrid').innerHTML=cards.join('');$('#teamCount').textContent=save.party.length+' / 6 PARTY'}
@@ -100,7 +109,54 @@ function showModal(html){$('#modalContent').innerHTML=html;$('#modal').classList
 function closeModal(){$('#modal').classList.add('hidden')}
 function levelUp(entry,amount){if(!entry)return;entry.xp+=amount;let ups=0;while(entry.level<100&&entry.xp>=xpNeeded(entry.level)){entry.xp-=xpNeeded(entry.level);entry.level++;ups++}if(entry.level>=100){entry.level=100;entry.xp=0}return ups}
 function gainCoins(n){save.coins=Math.max(0,save.coins+n)}
-function setStarter(id){if(save.starterChosen)return;getPokemon(id).then(p=>{const entry=addOwned(p,10);save.starterChosen=true;save.starterId=id;save.selectedId=entry.uid;persist();toast(cap(p.name)+' chose you back!');renderHome();renderTeam();pageTo('home')}).catch(()=>toast('Could not load starter. Try again.'))}
+async function renderStarterSelection(){
+ if(save.starterChosen){pageTo('home');return}
+ const grid=$('#onboardStarterGrid');if(!grid)return;
+ $('.generation-tab').forEach(b=>b.classList.toggle('active',Number(b.dataset.gen)===activeStarterGen));
+ $('#generationRegion').textContent='GENERATION '+String(activeStarterGen).padStart(2,'0')+' / '+REGION_NAMES[activeStarterGen];
+ const titles={1:'THE ORIGINAL THREE',2:'THE JOHTO TRIO',3:'THE HOENN TRIO',4:'THE SINNOH TRIO',5:'THE UNOVA TRIO',6:'THE KALOS TRIO',7:'THE ALOLA TRIO',8:'THE GALAR TRIO',9:'THE PALDEA TRIO'};
+ $('#generationTitle').textContent=titles[activeStarterGen];
+ const ids=STARTERS_BY_GEN[activeStarterGen];
+ $('#starterCount').textContent='0'+activeStarterGen+' / 09';
+ grid.innerHTML='<div class="starter-loading"><span class="loading-orbit"></span>Finding your first partners…</div>';
+ try{
+  const starters=await Promise.all(ids.map(getPokemon));
+  if(activePage!=='starter')return;
+  grid.innerHTML=starters.map(p=>{
+   const type=getTypes(p)[0]||'normal';const isSelected=Number(selectedStarterId)===p.id;
+   const art=p.sprites?.other?.['official-artwork']?.front_default||pickSprite(p);
+   return '<button type="button" class="onboard-starter-card '+(isSelected?'selected':'')+'" data-pick-starter="'+p.id+'"><span class="partner-bloom"></span><span class="partner-number">NO. '+String(p.id).padStart(3,'0')+'</span><img src="'+escAttr(art)+'" alt="'+escAttr(cap(p.name))+'" loading="eager"><span class="partner-name">'+esc(cap(p.name))+'</span><span class="type '+type+'">'+type+'</span><span class="partner-choose">'+(isSelected?'✓ YOUR PARTNER':'CHOOSE PARTNER')+'</span></button>'
+  }).join('');
+  updateStarterSelectionSummary();
+ }catch(e){grid.innerHTML='<div class="empty-state">We could not reach the Pokédex. Check your connection and try again.</div>'}
+}
+function updateStarterSelectionSummary(){
+ const pId=Number(selectedStarterId);const valid=STARTERS.includes(pId);
+ const button=$('#confirmStarter');if(button)button.disabled=!valid;
+ const summary=$('#chosenSummary');if(!summary)return;
+ if(!valid){summary.innerHTML='<span class="chosen-empty">✦</span><span><b>YOUR PARTNER</b><small>Pick a Pokémon above</small></span>';return}
+ const card=$('#onboardStarterGrid [data-pick-starter="'+pId+'"]');
+ let name=card?.querySelector('.partner-name')?.textContent||'Partner selected';
+ let type=card?.querySelector('.type')?.textContent||'';
+ let pImage=card?.querySelector('img')?.src||'';
+ summary.innerHTML=(pImage?'<img src="'+escAttr(pImage)+'" alt="">':'<span class="chosen-empty">✦</span>')+'<span><b>'+esc(name)+'</b><small>LEVEL 10 · '+esc(type.toUpperCase())+' TYPE</small></span>';
+}
+function selectStarter(id){
+ const gen=Number(Object.keys(STARTERS_BY_GEN).find(g=>STARTERS_BY_GEN[g].includes(Number(id))));
+ if(!gen)return;selectedStarterId=Number(id);
+ if(gen!==activeStarterGen){activeStarterGen=gen;renderStarterSelection();return}
+ $('#onboardStarterGrid [data-pick-starter]').forEach(card=>{const selected=Number(card.dataset.pickStarter)===selectedStarterId;card.classList.toggle('selected',selected);const action=card.querySelector('.partner-choose');if(action)action.textContent=selected?'✓ YOUR PARTNER':'CHOOSE PARTNER'});
+ updateStarterSelectionSummary();
+}
+function setStarter(id){
+ if(save.starterChosen)return;
+ const picked=Number(id??selectedStarterId);
+ if(!STARTERS.includes(picked)){toast('Choose a starter first.');return}
+ getPokemon(picked).then(p=>{
+  const entry=addOwned(p,10);save.starterChosen=true;save.starterId=picked;save.selectedId=entry.uid;
+  persist();toast(cap(p.name)+' is joining your adventure!');renderHome();renderTeam();pageTo('home');
+ }).catch(()=>toast('Could not load that Pokémon. Please try again.'));
+}
 function typeEffect(moveType,types){return types.reduce((v,t)=>v*((TYPE_CHART[moveType]||{})[t]??1),1)}
 function pickFallbacks(type){return deep(FALLBACK_MOVES[type]||FALLBACK_MOVES.normal)}
 async function getMoves(p,level){const version='scarlet-violet';let learnt=(p.moves||[]).map(m=>{const d=m.version_group_details||[];const vg=d.filter(x=>x.version_group?.name===version&&x.move_learn_method?.name==='level-up').sort((a,b)=>a.level_learned_at-b.level_learned_at);return {name:m.move.name,level:vg.length?vg[vg.length-1].level_learned_at:-1,detail:vg[vg.length-1]}}).filter(m=>m.level>=0&&m.level<=level).sort((a,b)=>a.level-b.level);
@@ -183,7 +239,10 @@ function setupListeners(){
  $$('[data-page]').forEach(b=>b.addEventListener('click',()=>pageTo(b.dataset.page)));
  $$('[data-battle]').forEach(b=>b.addEventListener('click',()=>startBattle(b.dataset.battle)));
  $('#quickBattle').addEventListener('click',()=>startBattle('practice'));$('#practiceBtn').addEventListener('click',()=>startBattle('practice'));
- $('#starterGrid').addEventListener('click',e=>{const b=e.target.closest('[data-starter]');if(b)setStarter(Number(b.dataset.starter))});
+ $('#starterGrid')?.addEventListener('click',e=>{const b=e.target.closest('[data-starter]');if(b)setStarter(Number(b.dataset.starter))});
+ $('#generationBar').addEventListener('click',e=>{const b=e.target.closest('[data-gen]');if(!b)return;activeStarterGen=Number(b.dataset.gen);renderStarterSelection()});
+ $('#onboardStarterGrid').addEventListener('click',e=>{const b=e.target.closest('[data-pick-starter]');if(b)selectStarter(Number(b.dataset.pickStarter))});
+ $('#confirmStarter').addEventListener('click',()=>{if(!selectedStarterId){toast('Pick your first partner first.');return}setStarter(selectedStarterId)});
  $('#rosterGrid').addEventListener('click',e=>{const sel=e.target.closest('[data-select]'),rel=e.target.closest('[data-release]');if(sel){save.selectedId=sel.dataset.select;persist();renderTeam();updateHomeStarter()}if(rel)showRelease(rel.dataset.release)});
  $$('.tab').forEach(t=>t.addEventListener('click',()=>{$$('.tab').forEach(b=>b.classList.toggle('active',b===t));$('#shop-items').classList.toggle('hidden',t.dataset.shop!=='items');$('#shop-packs').classList.toggle('hidden',t.dataset.shop!=='packs')}));
  $('#page-shop').addEventListener('click',e=>{const b=e.target.closest('[data-buy]'),p=e.target.closest('[data-pack]');if(b)buyItem(b.dataset.buy);if(p)openPack(p.dataset.pack)});
@@ -196,6 +255,6 @@ function setupListeners(){
  $('#animationsToggle').addEventListener('change',e=>{save.settings.animations=e.target.checked;persist()});$('#effectsToggle').addEventListener('change',e=>{save.settings.reducedEffects=e.target.checked;document.body.classList.toggle('reduced-effects',e.target.checked);persist()});
  $('#resetSave').addEventListener('click',()=>{showModal('<div class="eyebrow">LOCAL DATA</div><h2>RESET EVERYTHING?</h2><p>This deletes the local save for your team, coins, and collection in this browser.</p><div class="modal-buttons"><button class="btn danger" id="resetConfirm">DELETE LOCAL SAVE</button><button class="btn ghost" id="resetCancel">CANCEL</button></div>');$('#resetCancel').onclick=closeModal;$('#resetConfirm').onclick=()=>{localStorage.removeItem(STORAGE_KEY);save=defaultSave();battle=null;closeModal();persist();renderHome();renderTeam();renderProfile();toast('Local save reset.')}})
 }
-function init(){checkNewDay();if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');setupListeners();renderHome();renderProfile();if(save.starterChosen)renderTeam();else renderTeam();if(save.starterChosen&&save.starterId&&!save.ownedDex.includes(save.starterId))save.ownedDex.push(save.starterId);persist()}
+function init(){checkNewDay();if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');setupListeners();renderHome();renderProfile();if(save.starterChosen){renderTeam();pageTo('home')}else{pageTo('starter')}if(save.starterChosen&&save.starterId&&!save.ownedDex.includes(save.starterId))save.ownedDex.push(save.starterId);persist()}
 init();
 })();
