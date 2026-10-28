@@ -101,8 +101,8 @@ function pageTo(name){
  if(!save.starterChosen&&name!=='starter'){name='starter'}
  activePage=name;
  document.body.classList.toggle('is-onboarding',name==='starter');
- $('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
- $('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
+ document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
+ document.querySelectorAll('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
  window.scrollTo({top:0,behavior:save.settings.reducedEffects?'auto':'smooth'});
  if(name==='starter')renderStarterSelection();
  if(name==='home')renderHome();
@@ -127,7 +127,7 @@ function gainCoins(n){save.coins=Math.max(0,save.coins+n)}
 async function renderStarterSelection(){
  if(save.starterChosen){pageTo('home');return}
  const grid=$('#onboardStarterGrid');if(!grid)return;
- $('.generation-tab').forEach(b=>b.classList.toggle('active',Number(b.dataset.gen)===activeStarterGen));
+ document.querySelectorAll('.generation-tab').forEach(b=>b.classList.toggle('active',Number(b.dataset.gen)===activeStarterGen));
  $('#generationRegion').textContent='GENERATION '+String(activeStarterGen).padStart(2,'0')+' / '+REGION_NAMES[activeStarterGen];
  const titles={1:'THE ORIGINAL THREE',2:'THE JOHTO TRIO',3:'THE HOENN TRIO',4:'THE SINNOH TRIO',5:'THE UNOVA TRIO',6:'THE KALOS TRIO',7:'THE ALOLA TRIO',8:'THE GALAR TRIO',9:'THE PALDEA TRIO'};
  $('#generationTitle').textContent=titles[activeStarterGen];
@@ -162,7 +162,7 @@ function selectStarter(id){
  const selectedCard=$('#onboardStarterGrid [data-pick-starter="'+selectedStarterId+'"]');
  if(selectedCard)selectedStarterInfo={name:selectedCard.querySelector('.partner-name')?.textContent||'Partner selected',type:selectedCard.querySelector('.type')?.textContent||'',image:selectedCard.querySelector('img')?.src||''};
  if(gen!==activeStarterGen){activeStarterGen=gen;renderStarterSelection();return}
- $('#onboardStarterGrid [data-pick-starter]').forEach(card=>{const selected=Number(card.dataset.pickStarter)===selectedStarterId;card.classList.toggle('selected',selected);const action=card.querySelector('.partner-choose');if(action)action.textContent=selected?'✓ YOUR PARTNER':'CHOOSE PARTNER'});
+ document.querySelectorAll('#onboardStarterGrid [data-pick-starter]').forEach(card=>{const selected=Number(card.dataset.pickStarter)===selectedStarterId;card.classList.toggle('selected',selected);const action=card.querySelector('.partner-choose');if(action)action.textContent=selected?'✓ YOUR PARTNER':'CHOOSE PARTNER'});
  updateStarterSelectionSummary();
 }
 function setStarter(id){
