@@ -14,8 +14,8 @@ Open `index.html` in a modern browser, or serve the folder with any static HTTP 
 - Level and XP progression, coins, an item shop, generation-era pack tiers, a party roster, and Pokédex search.
 - A full-screen first-join starter journey and a deliberately plain, responsive wireframe UI to support future redesign work.
 - Classic pixel battle sprites where available, preferring Pokémon Emerald sprites and falling back to Pokémon Black & White / PokéAPI sprites.
-- Local browser save data and a starter privacy-policy page.
-- Google sign-in is intentionally not wired up yet.
+- Local browser saves, Google sign-in through Firebase Authentication, and per-account cloud saves through Firestore. Local progress remains available when signed out.
+- Cloud sync compares local and cloud modification times before choosing which copy to load; this is a last-modified strategy, not real-time conflict resolution.
 
 ## Pokémon data and assets
 
@@ -25,7 +25,7 @@ The battle arena is currently a neutral placeholder. No bespoke battle backgroun
 
 ## Claude Code instructions\n\nRead `CLAUDE.md` before making changes. The current styling is intentionally neutral; preserve the functional skeleton and avoid reintroducing decorative art direction until the owner requests it.\n\n## Save and account status
 
-Current progression is saved to localStorage in the current browser. It does not sync between devices or browsers. Clearing browser site data removes this local save. Google authentication, cloud saves, account deletion, and cross-device syncing are not active.
+When signed out, progression is saved in localStorage. When signed in, the app syncs the game save to the signed-in user document at /users/{uid} in Firebase Cloud Firestore. Each account must be restricted to its own UID in Firestore Security Rules. Signing out leaves the local save in place. This prototype does not yet provide self-service cloud-account deletion. Review the privacy policy and deletion process before a public launch.
 
 ## Deployment
 
@@ -34,3 +34,8 @@ This is a static site and can be hosted on Vercel with no build step: the reposi
 ## Legal notice
 
 PokeDuel is an unofficial fan project and is not affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak. Pokémon names and related intellectual property belong to their respective owners. A public launch may require legal review, and this prototype is not presented as a commercial-use-cleared product.
+
+
+## Firebase setup required
+
+The app uses the Firebase 13.1.0 browser modules directly; no build step is required. In Firebase Console, enable Google under Authentication → Sign-in method, add pokeduel-henna.vercel.app (and localhost if testing locally) under Authentication → Settings → Authorized domains, create a Cloud Firestore database, and publish restrictive rules so a signed-in user can access only /users/{their UID}. Never use public read/write rules. The client configuration is in app.js; it is not a service-account credential. Cloud sync will report an error until the Console setup and rules are complete.
