@@ -94,9 +94,23 @@ function seededIndex(seed,len){let h=2166136261;for(let i=0;i<seed.length;i++){h
 function addOwned(p,level=10){const id=p.id;const entry={uid:String(Date.now())+Math.random().toString(36).slice(2,7),pokemonId:id,name:p.name,level,xp:0};save.party.push(entry);if(!save.selectedId)save.selectedId=entry.uid;if(!save.ownedDex.includes(id))save.ownedDex.push(id);return entry}
 function chosen(){return save.party.find(p=>p.uid===save.selectedId)||save.party[0]||null}
 function rosterEntry(uid){return save.party.find(p=>p.uid===uid)}
-function updateHeader(){const e=$('#coins');if(e)e.textContent=save.coins.toLocaleString();const count=DAILY.filter(k=>save.daily[k]).length;const prog=$('#dailyProgress');if(prog)prog.textContent=count+' / 3 CLEARED';DAILY.forEach(k=>{const el=$('#status-'+k);if(el){el.textContent=save.daily[k]?'COMPLETED':'AVAILABLE';el.classList.toggle('done',!!save.daily[k])}});const n=$('#potionCount');if(n)n.textContent='POTION × '+(save.inventory.potion||0)}
+function updateShopWallet(){const e=$('#shopCoins');if(e)e.textContent=save.coins.toLocaleString()}
+function updateHeader(){const e=$('#coins');if(e)e.textContent=save.coins.toLocaleString();updateShopWallet();const count=DAILY.filter(k=>save.daily[k]).length;const prog=$('#dailyProgress');if(prog)prog.textContent=count+' / 3 CLEARED';DAILY.forEach(k=>{const el=$('#status-'+k);if(el){el.textContent=save.daily[k]?'COMPLETED':'AVAILABLE';el.classList.toggle('done',!!save.daily[k])}});const n=$('#potionCount');if(n)n.textContent='POTION × '+(save.inventory.potion||0)}
 function checkNewDay(){const key=todayKey();if(save.dailyDate!==key){save.dailyDate=key;save.daily={easy:null,medium:null,hard:null};persist();toast('A new day, a fresh gauntlet.')}$('#todayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase()}
-function pageTo(name){activePage=name;$$('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));$$('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));window.scrollTo({top:0,behavior:save.settings.reducedEffects?'auto':'smooth'});if(name==='home')renderHome();if(name==='team')renderTeam();if(name==='profile')renderProfile();if(name==='dex'&&!dexLoaded.length)loadDex(true)}
+function pageTo(name){
+ if(!save.starterChosen&&name!=='starter'){name='starter'}
+ activePage=name;
+ document.body.classList.toggle('is-onboarding',name==='starter');
+ $('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
+ $('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
+ window.scrollTo({top:0,behavior:save.settings.reducedEffects?'auto':'smooth'});
+ if(name==='starter')renderStarterSelection();
+ if(name==='home')renderHome();
+ if(name==='team')renderTeam();
+ if(name==='profile')renderProfile();
+ if(name==='dex'&&!dexLoaded.length)loadDex(true);
+ if(name==='shop')updateShopWallet();
+}
 function updateHomeStarter(){const e=chosen();if(e){$('#homeStarter').textContent=cap(e.name);$('#homeLevel').textContent='Lv. '+e.level+' · '+(e.level>=100?'MAX LEVEL':'Starter / Party Pokémon');$('#starterThumb').src=SPRITES+'/'+e.pokemonId+'.png';$('#homeXp').style.width=(e.level>=100?100:Math.min(100,e.xp/xpNeeded(e.level)*100))+'%'}else{$('#homeStarter').textContent='Choose your starter';$('#homeLevel').textContent='Your adventure begins here';$('#starterThumb').src=SPRITES+'/25.png';$('#homeXp').style.width='0%'}}
 function renderHome(){updateHeader();updateHomeStarter();const has=save.starterChosen;$$('[data-battle]').forEach(b=>{b.disabled=!has||!!save.daily[b.dataset.battle];b.style.opacity=b.disabled?'.45':'1'});$('#quickBattle').disabled=!has;$('#practiceBtn').disabled=!has;$('#dailyProgress').textContent=DAILY.filter(k=>save.daily[k]).length+' / 3 CLEARED'}
 async function renderTeam(){const prompt=$('#starterPrompt'),roster=$('#rosterSection');if(prompt)prompt.classList.add('hidden');if(roster)roster.classList.toggle('hidden',!save.starterChosen);$('#teamCount').textContent=save.party.length+' / 6 PARTY';if(!save.starterChosen){pageTo('starter');return}
