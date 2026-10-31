@@ -462,7 +462,7 @@ function renderHome() {
   renderMainMenu();
   updateHud();
   clearInterval(resetTimer);
-  resetTimer = setInterval(() => { const el = $('#resetCountdown'); if (!el || activeScreen !== 'home') { clearInterval(resetTimer); return; } el.textContent = untilReset(); if (save.dailyDate !== G.todayKey()) renderHome(); }, 1000);
+  resetTimer = setInterval(() => { const el = $('#resetCountdown'); if (!el || activeScreen !== 'home') { clearInterval(resetTimer); return; } el.textContent = untilReset(); const mr = $('#missionReset'); if (mr) mr.textContent = el.textContent; if (save.dailyDate !== G.todayKey()) renderHome(); }, 1000);
   maybeCheckin();
 }
 function missionReady() { const v = save.dayStats.values; return save.missions.list.filter(m => !m.claimed && (v[m.stat] || 0) >= m.goal).length; }
@@ -505,13 +505,28 @@ function maybeCheckin() {
     ui.checkinShown = true; showCheckin();
   }, 450);
 }
+const MISSION_ICON = { practiceWins: 'battle', superEffective: 'bolt', crits: 'physical', boxesOpened: 'gift', teraUsed: 'gem', statusMoves: 'status', trainingItems: 'bag', kos: 'flame', dailyWins: 'rank', damageDealt: 'special' };
 function showMissions() {
   const v = save.dayStats.values;
   const ms = save.missions.list;
+  const claimed = ms.filter(m => m.claimed).length;
   const allDone = ms.length && ms.every(m => m.claimed);
-  showModal(`<div class="eyebrow">Resets at midnight</div><h2 id="modalTitle">Daily missions</h2>
-    <ul class="mission-list">${ms.map((m, i) => { const prog = Math.min(m.goal, v[m.stat] || 0); return `<li class="mission">${ic(m.claimed ? 'check' : 'mission')}<span><b>${esc(m.text)}</b><br><small>${m.reward} coins · ${fmt(prog)} / ${fmt(m.goal)}</small></span>${m.claimed ? '<span class="tag cyan">Done</span>' : prog >= m.goal ? `<button class="btn primary small" data-claim-mission="${i}">Claim</button>` : '<span></span>'}<span class="bar"><i style="width:${prog / m.goal * 100}%"></i></span></li>`; }).join('')}</ul>
-    <div class="row-btns">${allDone ? (save.missions.bonus ? '<span class="tag cyan">Bonus claimed</span>' : '<button class="btn primary" id="missionBonus">Claim bonus: Exp. Candy L</button>') : '<span class="muted">Complete all three for a bonus Exp. Candy L.</span>'}<button class="btn ghost" data-close>Close</button></div>`);
+  const total = ms.reduce((a, m) => a + m.reward, 0);
+  const cards = ms.map((m, i) => {
+    const prog = Math.min(m.goal, v[m.stat] || 0), pct = prog / m.goal * 100;
+    const state = m.claimed ? 'done' : prog >= m.goal ? 'ready' : 'open';
+    return `<li class="mcard ${state}"><span class="mnum">0${i + 1}</span><span class="micon">${ic(MISSION_ICON[m.stat] || 'mission')}</span>
+      <b class="mtitle">${esc(m.text)}</b>
+      <span class="mprog"><span class="mbar"><i style="width:${pct}%"></i></span><span class="mcount">${fmt(prog)} / ${fmt(m.goal)}</span></span>
+      <span class="mfoot"><span class="mreward">${ic('coin')}${m.reward}</span>${state === 'done' ? `<span class="mstamp">${ic('check')}Claimed</span>` : state === 'ready' ? `<button class="btn primary small" data-claim-mission="${i}">Claim</button>` : `<span class="mleft">${fmt(m.goal - prog)} to go</span>`}</span></li>`;
+  }).join('');
+  const pips = ms.map(m => `<i class="${m.claimed ? 'on' : ''}"></i>`).join('');
+  showModal(`<div class="mhead"><div><div class="eyebrow">Daily missions · resets in <b id="missionReset">${untilReset()}</b></div><h2 id="modalTitle">Today's missions</h2></div>
+      <div class="mtotal"><small>Claimed</small><b>${claimed}<span>/${ms.length}</span></b><small>${total} coins available</small></div></div>
+    <ul class="mgrid">${cards}</ul>
+    <div class="mbonus ${allDone ? (save.missions.bonus ? 'done' : 'ready') : ''}">${pic(G.itemSprite('expcandyl'), [], 'alt=""')}<div><b>Daily bonus: Exp. Candy L</b><small>Claim all three missions to unlock it.</small><span class="mpips">${pips}</span></div>
+      ${allDone ? (save.missions.bonus ? `<span class="mstamp">${ic('check')}Claimed</span>` : '<button class="btn primary" id="missionBonus">Claim bonus</button>') : `<span class="mleft">${ms.length - claimed} left</span>`}</div>
+    <div class="row-btns"><button class="btn ghost" data-close>Close</button></div>`, { wide: true });
 }
 function claimCheckin() {
   const key = G.todayKey();
@@ -842,14 +857,28 @@ function openBox(kind, free) {
   save.stats.boxesOpened++; bumpDay('boxesOpened');
   afterProgress();
   if (activeScreen === 'shop') renderShop(); if (activeScreen === 'home') renderHome();
-  revealModal(p, { again: free ? null : kind });
+  const sub = G.BOXES[kind].odds.map(o => o[2]);
+  const reelPool = kind === 'outbreak' ? [G.dailyOutbreak(key)] : sub.flatMap(k => G.boxPool(k));
+  revealModal(p, { again: free ? null : kind, reel: reelPool });
 }
-function revealModal(p, { title, subtitle, again } = {}) {
+// Casino-style vertical reel: icons spin past a lit window and land on the prize.
+const REEL_STEP = 112, REEL_LEN = 34, REEL_STOP = 30;
+function spinReel(p, pool) {
+  const r = E.makeRng(Math.floor(Math.random() * 2 ** 32));
+  const strip = Array.from({ length: REEL_LEN }, (_, i) => i === REEL_STOP ? p.species : pool[r.int(pool.length)]);
+  const items = strip.map((id, i) => { const n = D()[id].num; return `<li class="${i === REEL_STOP ? 'prize' : ''}">${pic(img.icon(n, i === REEL_STOP && p.shiny), [img.icon(n, false)], 'alt=""')}</li>`; }).join('');
+  const lights = Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('');
+  showModal(`<div class="reveal"><div class="eyebrow">Opening box</div><div class="reel ${p.shiny ? 'shiny' : ''}" aria-hidden="true"><div class="reel-lights">${lights}</div><div class="reel-window"><ul class="reel-strip" style="--stop:${-(REEL_STOP - 1) * REEL_STEP}px">${items}</ul><span class="reel-pointer l"></span><span class="reel-pointer r"></span></div></div><h2 id="modalTitle">Spinning…</h2></div>`, { locked: true });
+  requestAnimationFrame(() => requestAnimationFrame(() => $('#modalContent .reel')?.classList.add('spin')));
+}
+function revealModal(p, { title, subtitle, again, reel } = {}) {
   const d = sp(p);
   const ivSum = E.STATS.reduce((a, k) => a + p.ivs[k], 0);
   const perfect = E.STATS.filter(k => p.ivs[k] === 31).length;
   preload(img.art(d.num, p.shiny));
-  showModal(`<div class="reveal"><div class="stage"><div class="crate"></div></div><h2 id="modalTitle">Opening…</h2></div>`, { locked: true });
+  const spin = reel?.length && !save.settings.reducedEffects;
+  if (spin) spinReel(p, reel);
+  else showModal(`<div class="reveal"><div class="stage"><div class="crate"></div></div><h2 id="modalTitle">Opening…</h2></div>`, { locked: true });
   const finish = () => {
     const sparkles = p.shiny ? Array.from({ length: 6 }, (_, i) => `<svg class="sparkle" style="left:${10 + i * 15}%;top:${(i * 37) % 80}%;animation-delay:${i * .15}s" aria-hidden="true"><use href="assets/icons.svg#i-shiny"/></svg>`).join('') : '';
     showModal(`<div class="reveal ${p.shiny ? 'shiny' : ''}"><div class="stage">${sparkles}${artOf(d.num, p.shiny, d.name)}</div>
@@ -862,7 +891,7 @@ function revealModal(p, { title, subtitle, again } = {}) {
     $('#revealBoxes').onclick = () => { closeModal(true); ui.sel = p.uid; go('boxes'); };
     const ag = $('#revealAgain'); if (ag) ag.onclick = () => { closeModal(true); openBox(again); };
   };
-  setTimeout(finish, save.settings.reducedEffects ? 150 : 1100);
+  setTimeout(finish, save.settings.reducedEffects ? 150 : spin ? 3600 : 1100);
 }
 
 // ---------- Bag ----------
