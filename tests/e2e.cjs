@@ -70,7 +70,7 @@ let failures = 0;
     await closeModals();
     if (await page.locator('.drow').count() !== 3) throw new Error('rows');
     if (await page.locator('.ts-slot').count() !== 6) throw new Error('slots');
-    if (await page.locator('.qtile').count() < 6) throw new Error('tiles');
+    if (await page.locator('.hud-link').count() < 10) throw new Error('tabs');
     await shot('04-home');
   });
   await step('reload keeps progress and the seal stays valid', async () => {
@@ -98,7 +98,7 @@ let failures = 0;
     for (let i = 0; i < 12; i++) { await page.waitForTimeout(500); const c = page.locator('#modal:not(.hidden) [data-close]'); if (await c.count()) await c.first().click(); else if (await page.locator('#screen-home.active').count()) break; }
   };
   await step('practice battle plays to completion', async () => {
-    await page.click('.qtile[data-go="practice"]');
+    await page.click('.hud-link[data-go="practice"]');
     await page.waitForSelector('#battleControls [data-cmd="fight"]', { timeout: 20000 });
     await playBattle('practice');
     await page.waitForSelector('#screen-home.active', { timeout: 15000 });

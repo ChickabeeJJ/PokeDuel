@@ -351,10 +351,12 @@ function go(name, opts = {}) {
 }
 function updateHud() {
   if (!save) return;
-  $('#coins').textContent = fmt(save.coins);
+  const bump = (el, txt) => { if (el.textContent === txt) return; const first = el.textContent === '0' || !el.textContent; el.textContent = txt; if (!first && fxOn()) el.closest('.wal')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' }); };
+  bump($('#coins'), fmt(save.coins));
   for (const id of ['#shopCoins', '#bagCoins']) { const e = $(id); if (e) e.textContent = fmt(save.coins); }
   const score = G.trainerScore(save);
-  $('#hudScore').textContent = fmt(score);
+  bump($('#hudScore'), fmt(score));
+  renderMainMenu();
   $('#hudName').textContent = trainerName();
   $('#hudRank').textContent = rankName(score);
   const a = $('#hudAvatar'); const src = img.icon(save.avatar || 25, false); if (a.getAttribute('src') !== src) a.src = src;
@@ -468,11 +470,15 @@ function renderHome() {
   maybeCheckin();
 }
 function missionReady() { const v = save.dayStats.values; return save.missions.list.filter(m => !m.claimed && (v[m.stat] || 0) >= m.goal).length; }
+// Every destination lives in the top tabs; badges flag missions to claim and
+// today's fresh outbreak boxes.
 function renderMainMenu() {
+  if (!save?.missions) return;
   const ready = missionReady();
   const left = Math.max(0, 5 - (save.outbreak.date === G.todayKey() ? save.outbreak.opened : 0));
-  const items = [['journey', 'map', 'Journey', ''], ['practice', 'battle', 'Practice', ''], ['missions', 'mission', 'Missions', ready || ''], ['boxes', 'box', 'Boxes', ''], ['shop', 'shop', 'Shop', left ? 'New' : ''], ['bag', 'bag', 'Bag', ''], ['dex', 'dex', 'Pokédex', ''], ['medals', 'medal', 'Medals', '']];
-  $('#mainMenu').innerHTML = items.map(([go, icon, label, badge]) => `<button class="qtile" data-go="${go}">${ic(icon)}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ''}</button>`).join('');
+  const set = (id, txt) => { const el = $(id); if (!el) return; el.hidden = !txt; el.textContent = txt || ''; };
+  set('#navMissions', ready ? String(ready) : '');
+  set('#navShop', left ? 'New' : '');
 }
 function showCheckin() {
   const key = G.todayKey();
@@ -1751,7 +1757,7 @@ function setupListeners() {
       if (e.key.toLowerCase() === 'b') go('boxes');
       if (e.key.toLowerCase() === 'p') startBattle('practice');
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const items = $$('#mainMenu .qtile, #dailyCards [data-battle]'); const i = items.indexOf(document.activeElement);
+        const items = $$('#dailyCards [data-battle]'); const i = items.indexOf(document.activeElement);
         const n = i < 0 ? 0 : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
         items[n].focus(); e.preventDefault();
       }
@@ -1819,7 +1825,7 @@ function spawnWanderer() {
   const rightward = Math.random() < 0.5;
   const el = document.createElement('div');
   el.className = 'wanderer ' + (flies ? 'fly' : 'walk');
-  el.style.bottom = (flies ? 34 + Math.random() * 40 : 0) + 'px';
+  const lift = flies ? 24 + Math.random() * 40 : 0;
   const im = new Image();
   im.alt = ''; im.decoding = 'async'; im.crossOrigin = 'anonymous';
   im.onerror = () => el.remove();
@@ -1830,6 +1836,8 @@ function spawnWanderer() {
     const k = targetH / b.h;
     im.style.width = Math.round(im.naturalWidth * k) + 'px';
     im.style.marginBottom = -Math.round((im.naturalHeight - b.y - b.h) * k) + 'px';
+    // Flyers float, but always stay fully inside the lane.
+    el.style.bottom = Math.max(0, Math.min(lift, lane.clientHeight - targetH - 6)) + 'px';
     const w = lane.clientWidth, span = w + 240;
     const speed = 50 + d.bs[5] * 0.7; // px per second, from base Speed
     parade.live++;

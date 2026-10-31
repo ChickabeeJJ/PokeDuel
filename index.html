@@ -29,17 +29,20 @@
   <div class="hud-left">
   <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
   <div class="hud-wallet">
-    <span class="pill" title="Trainer points"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg><b id="hudScore">0</b>TP</span>
-    <span class="pill" title="Coins"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg><b id="coins">0</b></span>
+    <span class="wal tp" title="Trainer points"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg></span><span class="wal-txt"><b id="hudScore">0</b><small>Trainer pts</small></span></span>
+    <span class="wal coin" title="Coins"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg></span><span class="wal-txt"><b id="coins">0</b><small>Coins</small></span></span>
   </div>
   </div>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
     <button data-go="journey" class="hud-link">Journey</button>
+    <button data-go="practice" class="hud-link">Practice</button>
+    <button data-go="missions" class="hud-link">Missions<i class="nav-badge" id="navMissions" hidden></i></button>
     <button data-go="boxes" class="hud-link">Boxes</button>
-    <button data-go="shop" class="hud-link">Shop</button>
+    <button data-go="shop" class="hud-link">Shop<i class="nav-badge" id="navShop" hidden></i></button>
     <button data-go="bag" class="hud-link">Bag</button>
     <button data-go="dex" class="hud-link">Pokédex</button>
+    <button data-go="medals" class="hud-link">Medals</button>
     <button data-go="leaderboard" class="hud-link">Ranks</button>
   </nav>
   <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
@@ -67,7 +70,6 @@
       <header class="daily-head" id="dailyHead"></header>
       <section class="daily-track" id="dailyCards" aria-label="Today's three battles"></section>
       <section class="team-strip" id="teamStrip" aria-label="Your team"></section>
-      <nav class="quick-grid" id="mainMenu" aria-label="More"></nav>
     </div>
   </section>
 
@@ -174,6 +176,7 @@
     </div>
   </section>
 </main>
+<div id="parade" aria-hidden="true"></div>
 
 <footer class="site-foot" id="siteFoot" hidden>
   <span>PokeDuel is an unofficial, non-commercial fan project, not affiliated with Nintendo, The Pokémon Company or Game Freak.</span>
@@ -181,7 +184,6 @@
 </footer>
 
 <div class="modal-backdrop hidden" id="modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="icon-btn modal-close" id="modalClose" aria-label="Close"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><div id="modalContent"></div></div></div>
-<div id="parade" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="app.js"></script>
 </body>

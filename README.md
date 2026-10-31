@@ -26,9 +26,9 @@ Serve the folder with any static server, for example `npx serve .` or `python3 -
   - a 7-day check-in streak, three daily missions with a bonus, a daily mass outbreak, and daily weather;
   - a shareable emoji result and medals (achievements).
 - **Social**: a Trainer Card with any Pokémon as the profile picture and a showcase of three Pokémon, and leaderboards for Trainer Score, today's gauntlet, shinies and Pokédex.
-- **Home** is a single focused daily screen, in the style of daily web games such as PokeDoku. It shows the daily number, progress tiles, a reset countdown, today's three battles, your team, and one row of shortcuts.
+- **Home** is a single focused daily screen, in the style of daily web games such as PokeDoku. It shows the daily number, progress tiles, a reset countdown, today's three battles and your team. Every other destination is a tab in the top bar; badges flag missions to claim and new outbreak boxes.
 - **Start-up**: there is no loading screen. Code and data are preloaded in parallel, and a service worker (`sw.js`) caches them, so repeat visits start in about 0.3 s and work offline.
-- **Wandering Pokémon** cross the bottom of every screen except battles, sized by each species' real height. Flying types and Levitate users fly higher. They are hidden when animations are off or reduced motion is on.
+- **Wandering Pokémon** cross their own strip below the page content on every screen except battles (they never walk behind or over the UI), sized by each species' real height. Flying types and Levitate users fly higher. They are hidden when animations are off or reduced motion is on.
 - **Look and feel**: a greyscale (black-to-white, hint of blue) angular "arcade" design system with original SVG icons (`assets/icons.svg`) and logo (`assets/logo.svg`). No emoji are used. All visible text was measured at WCAG AA contrast.
 - **Save protection (anti-cheat)**: see the section below.
 - **Saves**:
