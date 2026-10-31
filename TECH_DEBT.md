@@ -4,7 +4,11 @@ Priority: **P1** fix before a public launch · **P2** important · **P3** nice t
 
 ## P1
 
-- **Leaderboards trust the client.** Scores are calculated in the browser and written to `/leaderboard/{uid}`. `firestore.rules` checks the shape and bounds of the data, but a determined player could still post fake numbers. Before a public launch, replay or validate daily battles server-side (for example, a Cloud Function that re-runs the deterministic daily seed with the submitted actions).
+- **Anti-cheat is client-side plus server rate limits.** Saves are sealed, Pokémon are signed, a ledger is audited, and exports are encrypted (see the README). `firestore.rules` caps how fast leaderboard numbers can rise.
+  - The seal key ships in the JavaScript, so someone who reverse-engineers the code can forge seals. The rate limits are the hard bound on what they can gain.
+  - For real enforcement, validate daily battles server-side. Battles are deterministic for a given date, so a Cloud Function could replay the submitted actions.
+  - Removing the "sealed" marker together with the seal makes a save look like a pre-protection save, which is then adopted rather than flagged. This is accepted, to avoid punishing older saves.
+  - New leaderboard entries above 30,000 score are rejected by the rules. A long-time player who signs in for the first time with a very high score would need that limit raised.
 - **Firebase Console setup is still required:** Google provider, authorised domains, a Firestore database, and the rules in `firestore.rules` (they now cover `leaderboard/{uid}` too). Until the rules are published, leaderboards show an error state.
 - **Account deletion is not implemented**, and leaderboard entries are not removed automatically. The privacy notice says so; it needs a deletion flow and operator contact details.
 - **Old cached clients can overwrite cloud saves.** The v2 save uses a new localStorage key, so local v1 data is never touched. But a browser still running the old v1 build while signed in could write a v1 save over the cloud document. This is low risk once the deploy propagates.

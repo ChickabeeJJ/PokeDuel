@@ -1,8 +1,10 @@
 rules_version = '2';
 // Publish in Firebase Console → Firestore Database → Rules.
-// Each player can read/write only their own save. Leaderboard entries are
-// readable by signed-in players and writable only by their owner, with basic
-// shape/bounds validation. Scores are still client-reported (see TECH_DEBT.md).
+// Saves: each player can read/write only their own document.
+// Leaderboard: readable by signed-in players; writable only by the owner, with
+// shape validation AND server-enforced rate limits. Even a client modified by a
+// cheater can only raise its numbers slowly (one update per 15 seconds, capped
+// gains per update), which keeps fabricated scores from jumping to the top.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
@@ -10,21 +12,35 @@ service cloud.firestore {
     }
 
     match /leaderboard/{uid} {
+      function owner() { return request.auth != null && request.auth.uid == uid; }
+      function shape(d) {
+        return d.keys().hasOnly(['name', 'avatar', 'score', 'wins', 'dex', 'shinies', 'streak', 'showcase', 'daily', 'updatedAt'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 16
+          && d.avatar is int && d.avatar >= 1 && d.avatar <= 1025
+          && d.score is int && d.score >= 0 && d.score <= 5000000
+          && d.wins is int && d.wins >= 0
+          && d.dex is int && d.dex >= 0 && d.dex <= 1025
+          && d.shinies is int && d.shinies >= 0 && d.shinies <= 1025
+          && d.streak is int && d.streak >= 0
+          && d.showcase is list && d.showcase.size() <= 3
+          && d.daily is map && d.daily.size() <= 3
+          && d.updatedAt == request.time;
+      }
       allow read: if request.auth != null;
-      allow delete: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'avatar', 'score', 'wins', 'dex', 'shinies', 'streak', 'showcase', 'daily', 'updatedAt'])
-        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 16
-        && request.resource.data.avatar is int && request.resource.data.avatar >= 1 && request.resource.data.avatar <= 1025
-        && request.resource.data.score is int && request.resource.data.score >= 0 && request.resource.data.score <= 5000000
-        && request.resource.data.wins is int && request.resource.data.wins >= 0
-        && request.resource.data.dex is int && request.resource.data.dex >= 0 && request.resource.data.dex <= 1025
-        && request.resource.data.shinies is int && request.resource.data.shinies >= 0 && request.resource.data.shinies <= 1025
-        && request.resource.data.streak is int && request.resource.data.streak >= 0
-        && request.resource.data.showcase is list && request.resource.data.showcase.size() <= 3
-        && request.resource.data.daily is map && request.resource.data.daily.size() <= 3
-        && request.resource.data.updatedAt == request.time;
+      allow delete: if owner();
+      // New entries start from a plausible baseline.
+      allow create: if owner() && shape(request.resource.data)
+        && request.resource.data.score <= 30000
+        && request.resource.data.shinies <= 20
+        && request.resource.data.dex <= 300;
+      // Updates: at most one every 15 s, with bounded gains per update.
+      allow update: if owner() && shape(request.resource.data)
+        && request.time > resource.data.updatedAt + duration.value(15, 's')
+        && request.resource.data.score <= resource.data.score + 4000
+        && request.resource.data.wins <= resource.data.wins + 25
+        && request.resource.data.dex <= resource.data.dex + 30
+        && request.resource.data.shinies <= resource.data.shinies + 4
+        && request.resource.data.streak <= resource.data.streak + 2;
     }
   }
 }

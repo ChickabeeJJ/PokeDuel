@@ -1,10 +1,19 @@
 {
-  "_comment": "Optional artwork. Put approved files in assets/backgrounds/ and set the filename here (e.g. \"home\": \"home.jpg\"). Leave null to use the built-in gradient. See ASSET_REQUESTS.md.",
+  "_comment": "Optional artwork registry. Only files named here are requested. Arena platform positions are percentages of the image (x/y = centre of the painted platform, w = its width). See ASSET_REQUESTS.md.",
   "backgrounds": {
-    "home": null,
-    "battle-easy": null,
-    "battle-medium": null,
-    "battle-hard": null,
-    "battle-practice": null
+    "home": null
+  },
+  "arenas": {
+    "field": {
+      "file": "battle-field.webp",
+      "foe": { "x": 78.7, "y": 60.5, "w": 31.4 },
+      "player": { "x": 31.6, "y": 79.5, "w": 52.2 }
+    }
+  },
+  "tiers": {
+    "easy": { "arena": "field", "light": "day" },
+    "practice": { "arena": "field", "light": "day" },
+    "medium": { "arena": "field", "light": "dusk" },
+    "hard": { "arena": "field", "light": "night" }
   }
 }

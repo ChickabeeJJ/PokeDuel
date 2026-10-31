@@ -1,5 +1,6 @@
 import * as E from './js/engine.js';
 import * as G from './js/game.js';
+import * as S from './js/security.js';
 
 // Firebase is loaded lazily so the game still works if the Firebase CDN is
 // unreachable; only sign-in, cloud saves and leaderboards are affected.
@@ -61,15 +62,22 @@ const artOf = (n, s, alt = '') => pic(img.art(n, s), [img.art(n, false), img.ico
 const preload = src => { const i = new Image(); i.src = src; };
 document.addEventListener('error', e => {
   const t = e.target;
+  if (t.tagName === 'IMG' && t.dataset.type) { t.outerHTML = `<span class="type ${tclass(t.dataset.type)}">${esc(t.dataset.type)}</span>`; return; }
   if (t.tagName !== 'IMG' || !t.dataset.fb) return;
   const list = t.dataset.fb.split('|').filter(Boolean);
   const next = list.shift();
   t.dataset.fb = list.join('|');
   if (next) t.src = next; else { t.removeAttribute('data-fb'); t.style.visibility = 'hidden'; }
 }, true);
-const typeChips = types => '<span class="types">' + types.map(t => `<span class="type ${tclass(t)}">${esc(t)}</span>`).join('') + '</span>';
+// Icons come from the original SVG set in assets/icons.svg.
+const ic = (name, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="assets/icons.svg#i-${name}"/></svg>`;
+const shinyIc = () => `<svg class="ic shiny-ic" role="img" aria-label="shiny"><use href="assets/icons.svg#i-shiny"/></svg>`;
+const TYPE_IDS = { Normal: 1, Fighting: 2, Flying: 3, Poison: 4, Ground: 5, Rock: 6, Bug: 7, Ghost: 8, Steel: 9, Fire: 10, Water: 11, Grass: 12, Electric: 13, Psychic: 14, Ice: 15, Dragon: 16, Dark: 17, Fairy: 18 };
+// Official Scarlet/Violet type labels from the PokéAPI sprite repo, with a CSS chip fallback.
+const typeImg = t => TYPE_IDS[t] ? `<img class="type-img" src="${SPR}/types/generation-ix/scarlet-violet/${TYPE_IDS[t]}.png" alt="${esc(t)}" data-type="${esc(t)}" decoding="async">` : `<span class="type ${tclass(t)}">${esc(t)}</span>`;
+const typeChips = types => '<span class="types">' + types.map(typeImg).join('') + '</span>';
 const hpCls = pct => pct <= 20 ? 'lo' : pct <= 50 ? 'mid' : '';
-const genderIcon = g => g === 'M' ? '<span class="g g-M" aria-label="male">♂</span>' : g === 'F' ? '<span class="g g-F" aria-label="female">♀</span>' : '';
+const genderIcon = g => g === 'M' ? `<span class="gbadge m" role="img" aria-label="male">${ic('male')}</span>` : g === 'F' ? `<span class="gbadge f" role="img" aria-label="female">${ic('female')}</span>` : '';
 
 // ---------- State ----------
 let save = null;
@@ -79,13 +87,24 @@ let authStatusMessage = 'Not signed in. Progress stays on this device.';
 let activeScreen = 'home';
 let toastTimer = null;
 let initialLocalSaveTimestamp = 0;
-const ui = { boxPage: 0, sel: null, sumTab: 'info', boxSearch: '', boxSort: 'recent', shopCat: 'boxes', shopSel: null, shopQty: 1, bagCat: 'medicine', bagSel: null, dexShown: 120, rankTab: 'score', starterGen: 1, starterSel: null };
+const ui = { deviceSealed: false, boxPage: 0, sel: null, sumTab: 'info', boxSearch: '', boxSort: 'recent', shopCat: 'boxes', shopSel: null, shopQty: 1, bagCat: 'medicine', bagSel: null, dexShown: 120, rankTab: 'score', starterGen: 1, starterSel: null };
 
 // ---------- Save / persistence ----------
+const SEALED_FLAG = 'pokeduel-sealed';
+// Reads the local save, verifying its tamper seal on the raw stored data
+// (before normalisation), then migrates/normalises it.
 function readSave() {
   try {
     const v2 = localStorage.getItem(STORAGE_KEY);
-    if (v2) { const s = G.migrateSave(JSON.parse(v2)); if (s) return s; }
+    if (v2) {
+      const raw = JSON.parse(v2);
+      const s = G.migrateSave(raw);
+      if (s) {
+        if (raw.seal && !S.verifySeal(raw)) flag(s, 'Save data was edited outside the game.');
+        else if (!raw.seal && localStorage.getItem(SEALED_FLAG)) flag(s, 'Save protection data was removed.');
+        return s;
+      }
+    }
     const v1 = localStorage.getItem(LEGACY_KEY);
     if (v1) {
       const s = G.migrateSave(JSON.parse(v1));
@@ -94,15 +113,29 @@ function readSave() {
   } catch (e) { console.warn('Could not read save', e); }
   return G.defaultSave();
 }
+// Marks a save unranked. Never deletes anything; reasons are shown on the Trainer Card.
+function flag(s, ...reasons) {
+  s.integrity = s.integrity || { status: 'ok', reasons: [] };
+  s.integrity.status = 'flagged';
+  s.integrity.reasons = [...new Set([...(s.integrity.reasons || []), ...reasons])].slice(0, 12);
+  s.integrity.since = s.integrity.since || new Date().toISOString();
+}
+function runAudit(s) { const issues = G.auditSave(s); if (issues.length) flag(s, ...issues); return issues; }
+const ranked = () => save.integrity?.status !== 'flagged';
 function persist() {
   save.lastActive = new Date().toISOString();
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(S.applySeal(save)));
+    localStorage.setItem(SEALED_FLAG, '1');
     if (!booting && !applyingRemoteSave) localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now()));
   } catch (e) { console.warn('Could not save locally', e); toast('Could not save to this browser (storage full or blocked).'); }
   updateHud();
   if (!booting && !applyingRemoteSave && currentUser && authReady) { scheduleCloudSave(); scheduleLeaderboard(); }
 }
+// Every coin and Exp. change goes through the ledger so audits can check the totals.
+function addCoins(n) { n = Math.max(0, Math.floor(n)); save.coins += n; save.ledger.earned += n; return n; }
+function spendCoins(n) { n = Math.floor(n); if (n < 0 || save.coins < n) return false; save.coins -= n; save.ledger.spent += n; return true; }
+function grantExp(p, amount) { const before = p.exp; const levels = G.gainExp(p, amount); save.ledger.expGranted += p.exp - before; return levels; }
 function getLocalSaveModifiedAt() {
   try {
     const v = Number(localStorage.getItem(LOCAL_MODIFIED_KEY)) || Number(localStorage.getItem(LEGACY_MODIFIED_KEY));
@@ -158,6 +191,8 @@ async function syncSignedInUser(user) {
     const data = snap.data();
     const remote = G.migrateSave(data.saveData);
     if (!remote) throw new Error('The cloud save format is missing or unsupported. Your local save has not been deleted.');
+    if (data.saveData?.seal && !S.verifySeal(data.saveData)) flag(remote, 'Cloud save was edited outside the game.');
+    runAudit(remote);
     const cloudAt = Number(data.updatedAt?.toMillis?.() || Date.parse(remote.lastActive || '') || 0);
     if (getLocalSaveModifiedAt() > cloudAt) { await writeCloudSave(user, save); setAuthStatus('Signed in · your newer local progress was synced to the cloud.'); toast('Your local progress was synced to your account.'); scheduleLeaderboard(); return; }
     applyingRemoteSave = true;
@@ -218,11 +253,12 @@ function scheduleLeaderboard() {
   clearTimeout(lbTimer);
   lbTimer = setTimeout(async () => {
     if (!currentUser || !save.starterChosen) return;
+    if (!ranked()) { try { await fb.deleteDoc(fb.doc(db, 'leaderboard', currentUser.uid)); } catch (e) {} return; }
     try { await fb.setDoc(fb.doc(db, 'leaderboard', currentUser.uid), leaderboardDoc()); }
-    catch (err) { console.warn('Leaderboard publish failed:', err); ui.lbError = authErrorMessage(err); }
-  }, 2500);
+    catch (err) { console.warn('Leaderboard publish failed (will retry):', err); ui.lbError = authErrorMessage(err); clearTimeout(lbTimer); lbTimer = setTimeout(scheduleLeaderboard, 60000); }
+  }, 20000);
 }
-const RANK_TABS = { score: ['Trainer Score', 'score', v => fmt(v) + ' TP'], today: ['Today’s Gauntlet', 'daily', v => fmt(v) + ' pts'], shinies: ['Shiny Hunters', 'shinies', v => v + ' ✦'], dex: ['Pokédex', 'dex', v => v + ' / 1025'] };
+const RANK_TABS = { score: ['Trainer Score', 'score', v => fmt(v) + ' TP'], today: ['Today’s Gauntlet', 'daily', v => fmt(v) + ' pts'], shinies: ['Shiny Hunters', 'shinies', v => v + ' shiny'], dex: ['Pokédex', 'dex', v => v + ' / 1025'] };
 async function renderRanks() {
   $('#rankTabs').innerHTML = Object.entries(RANK_TABS).map(([k, v]) => `<button role="tab" data-rank="${k}" class="${ui.rankTab === k ? 'on' : ''}" aria-selected="${ui.rankTab === k}">${v[0]}</button>`).join('');
   const body = $('#rankBody');
@@ -230,14 +266,15 @@ async function renderRanks() {
   const meCard = `<div class="rank-row me"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b></span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
   if (ui.firebaseDown) { body.innerHTML = meCard + '<div class="empty"><b>Leaderboards unavailable</b><p>Firebase could not be reached. Check your connection and reload.</p></div>'; return; }
   if (!currentUser) { body.innerHTML = meCard + `<div class="empty"><b>Sign in to compete</b><p>Leaderboards use your trainer name and scores only. Sign in with Google on the Trainer Card to publish your score.</p><button class="btn primary" data-go="profile">Go to Trainer Card</button></div>`; return; }
-  body.innerHTML = meCard + '<div class="loading"><span class="spinner"></span>Loading rankings…</div>';
+  const unrankedNote = ranked() ? '' : `<div class="integrity">${ic('warn')}<div><b>Your save is unranked</b>, so your score isn't published. See the Trainer Card for details.</div></div>`;
+  body.innerHTML = meCard + unrankedNote + '<div class="loading"><span class="spinner"></span>Loading rankings…</div>';
   try {
     const [, field] = RANK_TABS[ui.rankTab];
     const order = ui.rankTab === 'today' ? fb.orderBy(new fb.FieldPath('daily', G.todayKey()), 'desc') : fb.orderBy(field, 'desc');
     const snap = await fb.getDocs(fb.query(fb.collection(db, 'leaderboard'), order, fb.limit(50)));
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!rows.length) { body.innerHTML = meCard + '<div class="empty">No scores yet today. Be the first!</div>'; return; }
-    body.innerHTML = meCard + rows.map((r, i) => {
+    body.innerHTML = meCard + unrankedNote + rows.map((r, i) => {
       const v = ui.rankTab === 'today' ? r.daily?.[G.todayKey()] || 0 : r[field] || 0;
       const sc = (r.showcase || []).map(s => iconOf(s.num, s.shiny)).join('');
       return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b><span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
@@ -259,6 +296,7 @@ function bumpDay(stat, n = 1) {
   save.dayStats.values[stat] = (save.dayStats.values[stat] || 0) + n;
 }
 function addToCollection(p) {
+  save.ledger.pokemonGranted++;
   save.box.push(p);
   if (save.party.length < 6) save.party.push(p.uid);
   const n = sp(p).num;
@@ -268,7 +306,7 @@ function addToCollection(p) {
 function checkMedals() {
   for (const m of G.MEDALS) {
     if (save.medals[m.id] || !m.test(save)) continue;
-    save.medals[m.id] = G.todayKey(); save.coins += m.reward;
+    save.medals[m.id] = G.todayKey(); addCoins(m.reward);
     toast('Medal earned: ' + m.name + '! +' + m.reward + ' coins');
   }
 }
@@ -303,7 +341,7 @@ function go(name, opts = {}) {
   activeScreen = name;
   document.body.classList.toggle('in-battle', name === 'battle');
   $('#hud').hidden = name === 'starter' || name === 'battle';
-  $('#siteFoot').hidden = name === 'battle';
+  $('#siteFoot').hidden = !['home', 'dex', 'leaderboard', 'profile', 'medals'].includes(name);
   $$('.screen').forEach(s => s.classList.toggle('active', s.dataset.screen === name));
   $$('.hud-link').forEach(b => b.classList.toggle('active', b.dataset.go === name));
   if (!opts.noHash && location.hash !== '#/' + name) history.pushState(null, '', '#/' + name);
@@ -337,6 +375,7 @@ function closeModal(force) {
   $('#modal').classList.add('hidden');
   const cb = modalOnClose; modalOnClose = null;
   cb?.();
+  if (activeScreen === 'home' && save) maybeCheckin();
 }
 function confirmBox(title, text, okLabel, onOk, danger) {
   showModal(`<h2 id="modalTitle">${esc(title)}</h2><p>${text}</p><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn ${danger ? 'danger' : 'primary'}" id="confirmOk">${esc(okLabel)}</button></div>`);
@@ -345,26 +384,37 @@ function confirmBox(title, text, okLabel, onOk, danger) {
 // Pick a Pokémon from the collection. filter(p) → true | string (reason disabled)
 function pickPokemon(title, filter, onPick, { partyOnly = false } = {}) {
   const list = partyOnly ? partyMons() : [...partyMons(), ...save.box.filter(p => !save.party.includes(p.uid))];
-  showModal(`<h2 id="modalTitle">${esc(title)}</h2><div class="pick-grid">${list.map(p => { const r = filter ? filter(p) : true; return `<button data-pick="${esc(p.uid)}" ${r === true ? '' : 'disabled title="' + esc(r) + '"'}>${iconOf(sp(p).num, p.shiny)}<span>${esc(p.nickname || sp(p).name)}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</span><small class="muted">Lv. ${p.level}${r !== true ? ' · ' + esc(r) : ''}</small></button>`; }).join('') || '<div class="empty">No Pokémon available.</div>'}</div>`, { wide: true });
+  showModal(`<h2 id="modalTitle">${esc(title)}</h2><div class="pick-grid">${list.map(p => { const r = filter ? filter(p) : true; return `<button data-pick="${esc(p.uid)}" ${r === true ? '' : 'disabled title="' + esc(r) + '"'}>${iconOf(sp(p).num, p.shiny)}<span>${esc(p.nickname || sp(p).name)}${p.shiny ? shinyIc() : ''}</span><small class="muted">Lv. ${p.level}${r !== true ? ' · ' + esc(r) : ''}</small></button>`; }).join('') || '<div class="empty">No Pokémon available.</div>'}</div>`, { wide: true });
   $$('#modalContent [data-pick]').forEach(b => b.onclick = () => { closeModal(true); onPick(byUid(b.dataset.pick)); });
 }
 
 // ---------- Starter selection ----------
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 function renderStarter() {
-  $('#generationBar').innerHTML = Object.keys(G.STARTERS_BY_GEN).map(g => `<button role="tab" class="gen-tab ${+g === ui.starterGen ? 'active' : ''}" data-gen="${g}" aria-selected="${+g === ui.starterGen}">Gen ${['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][g]}<small>${G.REGIONS['g' + g]}</small></button>`).join('');
-  $('#onboardStarterGrid').innerHTML = G.STARTERS_BY_GEN[ui.starterGen].map(n => {
-    const id = G.speciesByNum(n), d = D()[id];
-    return `<button type="button" class="starter-card ${ui.starterSel === id ? 'selected' : ''}" data-pick-starter="${id}" aria-pressed="${ui.starterSel === id}"><span class="no">No. ${String(n).padStart(4, '0')}</span>${artOf(n, false, d.name)}<b>${esc(d.name)}</b>${typeChips(d.types)}</button>`;
+  const ids = G.STARTERS_BY_GEN[ui.starterGen].map(n => G.speciesByNum(n));
+  if (!ids.includes(ui.starterSel)) ui.starterSel = ui.starterSel && D()[ui.starterSel] && !ui.starterKeep ? ui.starterSel : ids[1];
+  $('#generationBar').innerHTML = Object.keys(G.STARTERS_BY_GEN).map(g => `<button role="tab" class="gen-tab ${+g === ui.starterGen ? 'active' : ''}" data-gen="${g}" aria-selected="${+g === ui.starterGen}"><b>${ROMAN[g]}</b><small>${G.REGIONS['g' + g]}</small></button>`).join('');
+  $('#onboardStarterGrid').innerHTML = ids.map(id => {
+    const d = D()[id];
+    return `<button type="button" class="st-mon ${tclass(d.types[0])} ${ui.starterSel === id ? 'selected' : ''}" data-pick-starter="${id}" aria-pressed="${ui.starterSel === id}" aria-label="${esc(d.name)}"><span class="art">${artOf(d.num, false, d.name)}</span><span class="st-plate"><small>No. ${String(d.num).padStart(4, '0')}</small><b>${esc(d.name)}</b>${typeChips(d.types)}</span></button>`;
   }).join('');
-  const sel = ui.starterSel && D()[ui.starterSel];
-  $('#chosenSummary').innerHTML = sel ? `${artOf(sel.num, false, sel.name)}<div class="eyebrow">Your partner</div><h2>${esc(sel.name)}</h2>${typeChips(sel.types)}<p class="muted">Level 10 · Abilities: ${Object.entries(sel.ab).map(([k, a]) => esc(a) + (k === 'H' ? ' (hidden)' : '')).join(', ')}</p><div class="base-stats">${baseStatBars(sel)}</div>` : '<div class="eyebrow">Your partner</div><p class="muted">Pick a Pokémon. Every Pokémon you get rolls its own nature, IVs, ability, Tera Type — and might be shiny or carry a rare mark.</p>';
-  $('#confirmStarter').disabled = !sel;
-  if (!$('#starterName').value && save.trainerName) $('#starterName').value = save.trainerName;
+  const sel = D()[ui.starterSel];
+  const screen = $('#screen-starter');
+  if (sel) screen.style.setProperty('--tc', `var(--t-${sel.types[0].toLowerCase()})`);
+  const total = sel ? sel.bs.reduce((a, b) => a + b, 0) : 0;
+  $('#chosenSummary').innerHTML = sel ? `
+    <div><div class="eyebrow">Your partner</div><h2>${esc(sel.name)}</h2>
+      <div class="meta">${typeChips(sel.types)}<span class="tag">Base total ${total}</span></div>
+      <p>Abilities: ${Object.entries(sel.ab).map(([k, a]) => `<b>${esc(a)}</b>${k === 'H' ? ' (hidden, 5%)' : ''}`).join(' · ')}</p></div>
+    <div class="stat-bars">${E.STATS.map((k, i) => `<div><span>${STAT_LABEL[k]}</span><b>${sel.bs[i]}</b><i class="${sel.bs[i] === Math.max(...sel.bs) ? 'hi' : ''}" style="width:${Math.min(100, sel.bs[i] / 130 * 100)}%"></i></div>`).join('')}</div>
+    <div class="st-cta"><label class="field"><span>Trainer name</span><input id="starterName" maxlength="16" placeholder="Your name" autocomplete="nickname" value="${esc(ui.starterName ?? save.trainerName ?? '')}"></label>
+      <button class="btn primary big" id="confirmStarter">Choose ${esc(sel.name)}</button>
+      <div class="keys-hint"><span><kbd>&larr;</kbd><kbd>&rarr;</kbd> Pick</span><span><kbd>Q</kbd><kbd>E</kbd> Generation</span><span><kbd>Enter</kbd> Choose</span></div></div>` : '';
 }
 function confirmStarter() {
   const id = ui.starterSel;
   if (!id || save.starterChosen) return;
-  const name = $('#starterName').value.trim().replace(/[<>]/g, '').slice(0, 16);
+  const name = ($('#starterName')?.value || '').trim().replace(/[<>]/g, '').slice(0, 16);
   save.trainerName = name || 'Trainer';
   const p = G.generatePokemon(id, 10, { origin: 'starter', markContext: markCtx() });
   p.friendship = 120;
@@ -374,43 +424,94 @@ function confirmStarter() {
   go('home');
   revealModal(p, { title: 'Your adventure begins!', subtitle: sp(p).name + ' is your first partner.' });
 }
-
 // ---------- Home ----------
+const WEATHER_ICONS = { sunny: 'sun', cloudy: 'cloud', rain: 'rain', thunder: 'storm', snow: 'snow', blizzard: 'snow', 'harsh-sun': 'sun', sandstorm: 'sand', fog: 'fog' };
+const TIER_NUM = { easy: 'I', medium: 'II', hard: 'III' };
+const dailyNumber = () => Math.max(1, G.dayDiff('2026-10-28', G.todayKey()) + 1);
+function untilReset() { const n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0); const t = Math.max(0, m - n) / 1000; return [t / 3600, (t % 3600) / 60, t % 60].map(x => String(Math.floor(x)).padStart(2, '0')).join(':'); }
+let resetTimer = null;
+// Home is a single focused daily column, like daily web puzzle games: today's
+// three battles front and centre, the team underneath, everything else one tap away.
 function renderHome() {
   checkNewDay();
-  const party = partyMons();
-  $('#partyCount').textContent = party.length + '/6';
-  $('#homeParty').innerHTML = party.map((p, i) => {
-    const st = G.statsOf(p);
-    return `<li><button class="party-row ${i === 0 ? 'lead' : ''}" data-open-mon="${esc(p.uid)}"><span><b>${esc(G.displayName(p))} ${p.shiny ? '<span class="shiny-star">✦</span>' : ''}</b><span class="hp"><span class="hp-label">HP</span><span class="hp-bar"><i style="width:100%"></i></span></span><span class="hpnum">${st.hp}/${st.hp}</span></span><span class="lv">Lv. ${p.level} ${genderIcon(p.gender)}</span>${iconOf(sp(p).num, p.shiny)}${p.item ? `<span class="held">${pic(G.itemSprite(p.item), [], 'alt=""')}</span>` : ''}</button></li>`;
-  }).join('') + Array.from({ length: 6 - party.length }, () => '<li><button class="party-row" data-go="boxes"><span class="muted">Empty slot</span></button></li>').join('');
   const key = G.todayKey(), w = G.dailyWeather(key);
   const claimed = save.checkin.last === key;
-  const nextDay = claimed ? ((save.checkin.streak - 1) % 7) + 1 : (G.dayDiff(save.checkin.last || '2000-01-01', key) === 1 ? (save.checkin.streak % 7) + 1 : 1);
-  const reward = G.CHECKIN_REWARDS[nextDay - 1];
-  $('#todayStrip').innerHTML = `
-    <div class="today-tile"><span class="big" aria-hidden="true">${w.icon}</span><span><b>${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</b><small>Today's weather: ${esc(w.name)}${w.mark ? ' · weather marks possible' : ''}</small></span></div>
-    <div class="today-tile checkin"><span class="big" aria-hidden="true">🗓</span><span><b>Day ${nextDay} check-in</b><small>${claimed ? 'Claimed · streak ' + save.checkin.streak : esc(reward.text) + ' · streak ' + (save.checkin.streak || 0)}</small></span>${claimed ? '' : '<button class="btn primary small" id="claimCheckin">Claim</button>'}</div>`;
-  const done = DAILY.filter(k => save.daily[k]).length;
-  $('#dailyProgress').textContent = done + ' / 3 cleared';
-  $('#dailyCards').innerHTML = DAILY.map((k, i) => {
+  const todayScore = save.dailyScores?.[key] || 0;
+  const tiles = DAILY.map(k => { const r = save.daily[k]; return `<span class="ptile ${r ? r.result : ''}" title="${G.DAILY_TIERS[k].name}">${r?.result === 'win' ? ic('check') : r?.result === 'loss' ? ic('close') : TIER_NUM[k]}</span>`; }).join('');
+  $('#dailyHead').innerHTML = `
+    <div class="dh-bar"><span class="dh-no">Daily #${dailyNumber()}</span><span class="dh-date">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+      <span class="dh-icons"><button class="icon-btn" id="howToPlay" aria-label="How to play" title="How to play"><b>?</b></button><button class="icon-btn" data-go="leaderboard" aria-label="Leaderboards" title="Leaderboards">${ic('rank')}</button><button class="icon-btn" data-go="profile" aria-label="Trainer card and settings" title="Trainer card and settings">${ic('card')}</button></span></div>
+    <h1>Today's Gauntlet</h1>
+    <p>Beat three trainers. One try each. Everyone faces the same teams today.</p>
+    <div class="dh-progress"><span class="ptiles">${tiles}</span><span class="dh-score"><small>Today</small><b>${fmt(todayScore)}</b><small>pts</small></span></div>
+    <div class="dh-chips"><span class="chip">${ic(WEATHER_ICONS[w.id] || 'sun')}${esc(w.name)}</span><button class="chip ${claimed ? '' : 'alert'}" id="openCheckin">${ic('calendar')}${claimed ? 'Streak ' + save.checkin.streak : 'Daily reward ready'}</button><span class="chip">${ic('bolt')}New battles in&nbsp;<b id="resetCountdown">${untilReset()}</b></span></div>`;
+  $('#dailyCards').innerHTML = DAILY.map(k => {
     const t = G.DAILY_TIERS[k], r = save.daily[k];
     const tr = G.buildTrainer(k, key, topLevel());
-    return `<article class="daily-card ${k} ${r ? 'done' : ''}"><span class="tier">0${i + 1} · ${k}</span><h3>${t.name}</h3><div class="foes">${tr.team.map(p => iconOf(sp(p).num, false, r ? sp(p).name : 'Unknown Pokémon')).join('')}</div>
-      <span class="reward">${t.size} Pokémon · Lv. ${tr.level}${tr.sunday ? ' · Sunday legend!' : ''} · ${t.coins} coins + EXP</span>
-      ${r ? `<span class="result ${r.result}">${r.result === 'win' ? 'Cleared · ' + fmt(r.score) + ' pts' : 'Defeated'}</span>${r.result === 'win' ? `<button class="btn ghost small" data-share="${k}">Share result</button>` : ''}` : `<button class="btn primary" data-battle="${k}">Battle</button>`}</article>`;
+    const team = tr.team.map(p => iconOf(sp(p).num, false, r ? sp(p).name : 'Hidden Pokémon')).join('');
+    const action = !r ? `<button class="btn primary" data-battle="${k}">${ic('battle')}Battle</button>`
+      : r.result === 'win' ? `<span class="res win"><b>${fmt(r.score)}</b><small>points</small></span><button class="icon-btn" data-share="${k}" aria-label="Share result" title="Share result">${ic('share')}</button>`
+      : '<span class="res loss"><b>Lost</b><small>Back tomorrow</small></span>';
+    return `<article class="drow ${k} ${r ? 'done ' + r.result : ''}"><span class="dnum">${TIER_NUM[k]}</span>
+      <div class="dinfo"><span class="dtier">${k}</span><h3>${t.name}</h3><span class="dmeta">vs ${esc(tr.name)} · ${t.size} Pokémon · Lv. ${tr.level}${tr.sunday ? ' · Sunday legend' : ''}</span></div>
+      <div class="dteam ${r ? 'shown' : ''}">${team}</div><div class="dact">${action}</div></article>`;
   }).join('');
-  const ms = save.missions.list;
-  const vals = save.dayStats.values;
-  $('#missionCount').textContent = ms.filter(m => m.claimed).length + '/3';
-  $('#missionList').innerHTML = ms.map((m, i) => {
-    const prog = Math.min(m.goal, vals[m.stat] || 0);
-    return `<li class="mission"><span><b>${esc(m.text)}</b> <small>· ${m.reward} coins</small></span>${m.claimed ? '<span class="tag">Done ✓</span>' : prog >= m.goal ? `<button class="btn primary small" data-claim-mission="${i}">Claim</button>` : `<small>${fmt(prog)}/${fmt(m.goal)}</small>`}<span class="bar"><i style="width:${prog / m.goal * 100}%"></i></span></li>`;
-  }).join('') + (ms.length && ms.every(m => m.claimed) ? `<li class="mission">${save.missions.bonus ? '<span class="tag">Bonus claimed ✓</span>' : '<button class="btn primary small" id="missionBonus">Claim bonus: Exp. Candy L</button>'}</li>` : '');
-  const ob = G.dailyOutbreak(key), od = D()[ob];
-  const left = Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0));
-  $('#outbreakCard').innerHTML = `${artOf(od.num, false, od.name)}<div><div class="eyebrow">Mass outbreak</div><h3>${esc(od.name)}</h3>${typeChips(od.types)}<p class="muted">Shiny odds 1/64 in today's Outbreak Box. ${left} left today.</p><button class="btn primary small" data-box="outbreak" ${left ? '' : 'disabled'}>Open · 90 coins</button></div>`;
+  const party = partyMons();
+  $('#teamStrip').innerHTML = `<div class="ts-head"><b>Your team</b><small>${party.length} / 6 · your lead goes first</small><button class="btn ghost small" data-go="boxes">${ic('box')}Edit team</button></div>
+    <div class="ts-slots">${party.map((p, i) => `<button class="ts-slot ${i === 0 ? 'lead' : ''}" data-open-mon="${esc(p.uid)}" title="${esc(G.displayName(p))}">${artOf(sp(p).num, p.shiny, sp(p).name)}<span>${esc(p.nickname || sp(p).name)} · Lv. ${p.level}</span>${p.shiny ? shinyIc() : ''}</button>`).join('')}${Array.from({ length: 6 - party.length }, () => '<button class="ts-slot vacant" data-go="shop" aria-label="Get more Pokémon from the Shop">' + ic('plus') + '</button>').join('')}</div>`;
+  renderMainMenu();
   updateHud();
+  clearInterval(resetTimer);
+  resetTimer = setInterval(() => { const el = $('#resetCountdown'); if (!el || activeScreen !== 'home') { clearInterval(resetTimer); return; } el.textContent = untilReset(); if (save.dailyDate !== G.todayKey()) renderHome(); }, 1000);
+  maybeCheckin();
+}
+function missionReady() { const v = save.dayStats.values; return save.missions.list.filter(m => !m.claimed && (v[m.stat] || 0) >= m.goal).length; }
+function renderMainMenu() {
+  const ready = missionReady();
+  const left = Math.max(0, 5 - (save.outbreak.date === G.todayKey() ? save.outbreak.opened : 0));
+  const items = [['practice', 'battle', 'Practice', ''], ['missions', 'mission', 'Missions', ready || ''], ['boxes', 'box', 'Boxes', ''], ['shop', 'shop', 'Shop', left ? 'New' : ''], ['bag', 'bag', 'Bag', ''], ['dex', 'dex', 'Pokédex', ''], ['medals', 'medal', 'Medals', '']];
+  $('#mainMenu').innerHTML = items.map(([go, icon, label, badge]) => `<button class="qtile" data-go="${go}">${ic(icon)}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ''}</button>`).join('');
+}
+function showCheckin() {
+  const key = G.todayKey();
+  const claimed = save.checkin.last === key;
+  const cont = save.checkin.last && G.dayDiff(save.checkin.last, key) === 1;
+  const streakNow = claimed ? save.checkin.streak : (cont ? save.checkin.streak : 0);
+  const today = claimed ? ((save.checkin.streak - 1) % 7) + 1 : (streakNow % 7) + 1;
+  const doneUpTo = claimed ? today : today - 1;
+  showModal(`<div class="eyebrow">Daily check-in</div><h2 id="modalTitle">${claimed ? 'See you tomorrow!' : 'Your daily reward'}</h2>
+    <p>Check in every day to keep your streak. Missing a day restarts the 7-day cycle. Best streak: ${save.checkin.best || 0} days.</p>
+    <div class="checkin-track">${G.CHECKIN_REWARDS.map(r => `<div class="ck-day ${r.day <= doneUpTo ? 'done' : ''} ${r.day === today && !claimed ? 'today' : ''}">${ic(r.day <= doneUpTo ? 'check' : r.box ? 'gift' : r.coins ? 'coin' : 'bag')}<b>Day ${r.day}</b><span>${esc(r.text)}</span></div>`).join('')}</div>
+    <div class="row-btns">${claimed ? '<button class="btn primary" data-close autofocus>Close</button>' : '<button class="btn ghost" data-close>Later</button><button class="btn primary" id="claimCheckin" autofocus>Claim reward</button>'}</div>`);
+}
+function showHowTo() {
+  showModal(`<div class="eyebrow">How to play</div><h2 id="modalTitle">PokeDuel in 30 seconds</h2>
+    <ul class="howto">
+      <li>${ic('battle')}<span><b>Three battles a day.</b> Warm-Up, Rival Test and Ace Challenge. One attempt each, with the same teams for every player.</span></li>
+      <li>${ic('rank')}<span><b>Score points.</b> Win with more HP left and in fewer turns to score higher, then compare on the leaderboard.</span></li>
+      <li>${ic('box')}<span><b>Grow your team.</b> Open boxes, train EVs, chase shinies and rare marks. Practice battles are unlimited.</span></li>
+      <li>${ic('calendar')}<span><b>Come back tomorrow.</b> New trainers every day at midnight, plus a daily reward streak.</span></li>
+    </ul><div class="row-btns"><button class="btn primary" data-close autofocus>Let's battle</button></div>`);
+}
+// Home intro queue: "How to play" once for new players, then the daily reward.
+function maybeCheckin() {
+  if (!save.starterChosen) return;
+  const needHowTo = !save.seenHowTo;
+  if (!needHowTo && (ui.checkinShown || save.checkin.last === G.todayKey())) return;
+  setTimeout(() => {
+    if (activeScreen !== 'home' || !$('#modal').classList.contains('hidden')) return;
+    if (!save.seenHowTo) { save.seenHowTo = true; persist(); showHowTo(); return; }
+    if (ui.checkinShown || save.checkin.last === G.todayKey()) return;
+    ui.checkinShown = true; showCheckin();
+  }, 450);
+}
+function showMissions() {
+  const v = save.dayStats.values;
+  const ms = save.missions.list;
+  const allDone = ms.length && ms.every(m => m.claimed);
+  showModal(`<div class="eyebrow">Resets at midnight</div><h2 id="modalTitle">Daily missions</h2>
+    <ul class="mission-list">${ms.map((m, i) => { const prog = Math.min(m.goal, v[m.stat] || 0); return `<li class="mission">${ic(m.claimed ? 'check' : 'mission')}<span><b>${esc(m.text)}</b><br><small>${m.reward} coins · ${fmt(prog)} / ${fmt(m.goal)}</small></span>${m.claimed ? '<span class="tag cyan">Done</span>' : prog >= m.goal ? `<button class="btn primary small" data-claim-mission="${i}">Claim</button>` : '<span></span>'}<span class="bar"><i style="width:${prog / m.goal * 100}%"></i></span></li>`; }).join('')}</ul>
+    <div class="row-btns">${allDone ? (save.missions.bonus ? '<span class="tag cyan">Bonus claimed</span>' : '<button class="btn primary" id="missionBonus">Claim bonus: Exp. Candy L</button>') : '<span class="muted">Complete all three for a bonus Exp. Candy L.</span>'}<button class="btn ghost" data-close>Close</button></div>`);
 }
 function claimCheckin() {
   const key = G.todayKey();
@@ -420,12 +521,11 @@ function claimCheckin() {
   save.checkin.best = Math.max(save.checkin.best || 0, save.checkin.streak);
   save.checkin.last = key;
   const r = G.CHECKIN_REWARDS[(save.checkin.streak - 1) % 7];
-  if (r.coins) save.coins += r.coins;
+  if (r.coins) addCoins(r.coins);
   for (const [id, n] of Object.entries(r.items || {})) save.inventory[id] = (save.inventory[id] || 0) + n;
-  afterProgress(); renderHome();
+  afterProgress(); closeModal(true); if (activeScreen === 'home') renderHome();
   if (r.box) openBox(r.box, true); else toast('Check-in reward: ' + r.text + '!');
 }
-
 // ---------- Boxes ----------
 function filteredBox() {
   const q = ui.boxSearch.trim().toLowerCase();
@@ -439,13 +539,13 @@ function renderBoxes() {
   if (!ui.sel || !byUid(ui.sel)) ui.sel = save.party[0] || save.box[0]?.uid;
   const party = partyMons();
   $('#boxTotals').textContent = save.box.length + ' Pokémon · ' + save.shinyDex.length + ' shiny species';
-  $('#boxParty').innerHTML = party.map(p => `<li><button class="${ui.sel === p.uid ? 'sel' : ''}" data-sel="${esc(p.uid)}"><span><span class="lvpill">Lv. ${p.level}</span> ${genderIcon(p.gender)}<b>${esc(p.nickname || sp(p).name)}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</b></span>${iconOf(sp(p).num, p.shiny)}</button></li>`).join('') + Array.from({ length: 6 - party.length }, () => '<li><div class="empty-slot">Empty</div></li>').join('');
+  $('#boxParty').innerHTML = party.map(p => `<li><button class="${ui.sel === p.uid ? 'sel' : ''}" data-sel="${esc(p.uid)}"><span><span class="row1"><span class="lvpill">Lv. ${p.level}</span>${genderIcon(p.gender)}${p.shiny ? shinyIc() : ''}</span><b>${esc(p.nickname || sp(p).name)}</b></span>${iconOf(sp(p).num, p.shiny)}</button></li>`).join('') + Array.from({ length: 6 - party.length }, () => '<li><div class="empty-slot">Empty</div></li>').join('');
   const list = filteredBox();
   const pages = Math.max(1, Math.ceil(list.length / 30));
   ui.boxPage = Math.min(ui.boxPage, pages - 1);
   $('#boxName').textContent = 'Box ' + (ui.boxPage + 1) + ' / ' + pages;
   const slice = list.slice(ui.boxPage * 30, ui.boxPage * 30 + 30);
-  $('#boxGrid').innerHTML = slice.map(p => `<button class="cell ${ui.sel === p.uid ? 'sel' : ''} ${save.party.includes(p.uid) ? 'in-party' : ''}" data-sel="${esc(p.uid)}" aria-label="${esc(sp(p).name)} level ${p.level}${p.shiny ? ', shiny' : ''}">${iconOf(sp(p).num, p.shiny)}${p.shiny ? '<span class="cs shiny-star">✦</span>' : ''}${p.mark ? '<span class="cm"></span>' : ''}</button>`).join('') + Array.from({ length: 30 - slice.length }, () => '<div class="cell"></div>').join('');
+  $('#boxGrid').innerHTML = slice.map(p => `<button class="cell ${ui.sel === p.uid ? 'sel' : ''} ${save.party.includes(p.uid) ? 'in-party' : ''}" data-sel="${esc(p.uid)}" aria-label="${esc(sp(p).name)} level ${p.level}${p.shiny ? ', shiny' : ''}">${iconOf(sp(p).num, p.shiny)}${p.shiny ? '<svg class="cs shiny-ic" aria-hidden="true"><use href="assets/icons.svg#i-shiny"/></svg>' : ''}${p.mark ? '<svg class="cm" aria-hidden="true"><use href="assets/icons.svg#i-mark"/></svg>' : ''}</button>`).join('') + Array.from({ length: 30 - slice.length }, () => '<div class="cell"></div>').join('');
   renderSummary();
 }
 const STAT_LABEL = { hp: 'HP', atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed' };
@@ -457,7 +557,7 @@ function radar(p) {
   const ivs = G.effectiveIvs(p);
   const poly = r => order.map((_, i) => pt(i, r).join(',')).join(' ');
   const val = order.map((k, i) => pt(i, 12 + (ivs[k] / 31) * (R - 12)).join(',')).join(' ');
-  const labels = order.map((k, i) => { const [x, y] = pt(i, R + 22); return `<text x="${x}" y="${y - 6}" text-anchor="middle" class="lbl">${STAT_LABEL[k]}</text><text x="${x}" y="${y + 9}" text-anchor="middle">${G.ivJudge(ivs[k])}${p.hyper?.[k] ? ' ★' : ''}</text>`; }).join('');
+  const labels = order.map((k, i) => { const [x, y] = pt(i, R + 22); return `<text x="${x}" y="${y - 6}" text-anchor="middle" class="lbl">${STAT_LABEL[k]}</text><text x="${x}" y="${y + 9}" text-anchor="middle">${G.ivJudge(ivs[k])}${p.hyper?.[k] ? ' (HT)' : ''}</text>`; }).join('');
   return `<svg class="radar" viewBox="0 0 300 240" role="img" aria-label="IV judge chart"><polygon points="${poly(R)}" fill="rgba(5,30,45,.45)" stroke="rgba(255,255,255,.5)"/><polygon points="${poly(R * .5)}" fill="none" stroke="rgba(255,255,255,.18)"/><polygon points="${val}" fill="rgba(120,220,255,.75)" stroke="#fff" stroke-width="1.5"/>${labels}</svg>`;
 }
 function renderSummary() {
@@ -481,17 +581,17 @@ function renderSummary() {
       <dt>Record</dt><dd>${p.wins || 0} wins · ${p.battles || 0} battles</dd><dt>Met</dt><dd>${new Date(p.metAt).toLocaleDateString()} · ${esc(p.origin)}</dd></dl>`;
   } else if (ui.sumTab === 'stats') {
     const ivSum = E.STATS.reduce((a, k) => a + p.ivs[k], 0), evSum = E.STATS.reduce((a, k) => a + p.evs[k], 0);
-    body = radar(p) + `<p style="text-align:center;font-weight:800">${G.ivTotalJudge(ivSum)}</p><table class="stat-table"><tr><th>Stat</th><th>Value</th><th>IV</th><th>EV</th></tr>${E.STATS.map(k => `<tr><td class="${k === plus ? 'plus' : k === minus ? 'minus' : ''}">${STAT_LABEL[k]}${k === plus ? ' ▲' : k === minus ? ' ▼' : ''}</td><td>${st[k]}</td><td>${p.ivs[k]}${p.hyper?.[k] ? '★' : ''}</td><td>${p.evs[k]} <span class="ev-bar"><i style="width:${p.evs[k] / 252 * 100}%"></i></span></td></tr>`).join('')}</table><p class="muted">EVs ${evSum}/510 · Base stat total ${d.bs.reduce((a, b) => a + b, 0)} · ${G.GROWTH_NAMES[d.gr]} growth</p>`;
+    body = radar(p) + `<p style="text-align:center;font-weight:800">${G.ivTotalJudge(ivSum)}</p><table class="stat-table"><tr><th>Stat</th><th>Value</th><th>IV</th><th>EV</th></tr>${E.STATS.map(k => `<tr><td class="${k === plus ? 'plus' : k === minus ? 'minus' : ''}">${STAT_LABEL[k]}${k === plus ? ' +10%' : k === minus ? ' −10%' : ''}</td><td>${st[k]}</td><td>${p.ivs[k]}${p.hyper?.[k] ? ' HT' : ''}</td><td>${p.evs[k]} <span class="ev-bar"><i style="width:${p.evs[k] / 252 * 100}%"></i></span></td></tr>`).join('')}</table><p class="muted">EVs ${evSum}/510 · Base stat total ${d.bs.reduce((a, b) => a + b, 0)} · ${G.GROWTH_NAMES[d.gr]} growth</p>`;
   } else if (ui.sumTab === 'moves') {
     body = `<div class="move-list">${p.moves.map(id => moveRow(id)).join('')}</div><button class="btn teal small" data-act="moves">Change moves</button>`;
   } else {
-    body = p.marks.length ? `<div class="mark-list">${p.marks.map(m => `<div class="mark-row"><i></i><span>${esc(G.MARKS[m].name)}<br><small class="muted">Title: “${esc(G.MARKS[m].title)}”</small></span>${p.mark === m ? '<span class="tag">Shown</span>' : `<button class="btn small ghost" data-act="showmark" data-mark="${m}">Show title</button>`}</div>`).join('')}${p.mark ? '<button class="btn small ghost" data-act="hidemark">Hide title</button>' : ''}</div>` : '<p class="muted">No marks yet. Marks can appear on any Pokémon you get: rare, personality, time-of-day and weather marks, plus Jumbo/Mini, Partner and Mightiest marks earned in play.</p>';
+    body = p.marks.length ? `<div class="mark-list">${p.marks.map(m => `<div class="mark-row">${ic('mark')}<span>${esc(G.MARKS[m].name)}<br><small class="muted">Title: “${esc(G.MARKS[m].title)}”</small></span>${p.mark === m ? '<span class="tag">Shown</span>' : `<button class="btn small ghost" data-act="showmark" data-mark="${m}">Show title</button>`}</div>`).join('')}${p.mark ? '<button class="btn small ghost" data-act="hidemark">Hide title</button>' : ''}</div>` : '<p class="muted">No marks yet. Marks can appear on any Pokémon you get: rare, personality, time-of-day and weather marks, plus Jumbo/Mini, Partner and Mightiest marks earned in play.</p>';
   }
   const inParty = save.party.includes(p.uid);
   const evos = G.evolutionOptions(p, { inventory: save.inventory, weather: G.dailyWeather(G.todayKey()).id, coins: save.coins });
   const canEvo = evos.filter(o => o.ok);
-  el.innerHTML = `<div class="sum-head"><span class="ball"></span><span>${esc(p.nickname || d.name)}</span>${genderIcon(p.gender)}${p.shiny ? '<span class="shiny-star">✦</span>' : ''}<span class="lvl">Lv. ${p.level}</span></div>
-    <div class="sum-body"><div class="sum-art">${artOf(d.num, p.shiny, d.name)}${p.mark ? `<span class="mark-banner">${esc(G.displayName(p))}</span>` : ''}</div>
+  el.innerHTML = `<div class="sum-head"><span class="ball"></span><span>${esc(p.nickname || d.name)}</span>${genderIcon(p.gender)}${p.shiny ? shinyIc() : ''}<span class="lvl">Lv. ${p.level}</span></div>
+    <div class="sum-scroll"><div class="sum-body"><div class="sum-art">${artOf(d.num, p.shiny, d.name)}${p.mark ? `<span class="mark-banner">${ic('mark')}${esc(G.displayName(p))}</span>` : ''}</div>
     <div class="sum-tabs" role="tablist">${Object.entries(tabs).map(([k, v]) => `<button role="tab" data-sumtab="${k}" class="${ui.sumTab === k ? 'on' : ''}" aria-selected="${ui.sumTab === k}">${v}</button>`).join('')}</div>${body}</div>
     <div class="sum-actions">
       ${inParty ? (save.party[0] === p.uid ? '' : '<button class="btn small primary" data-act="lead">Make lead</button>') + (save.party.length > 1 ? '<button class="btn small ghost" data-act="unparty">Move to box</button>' : '') : `<button class="btn small primary" data-act="party" ${save.party.length >= 6 ? 'disabled title="Party is full (6)"' : ''}>Add to party</button>`}
@@ -502,7 +602,7 @@ function renderSummary() {
       <button class="btn small ghost" data-act="nick">Nickname</button>
       <button class="btn small ghost" data-act="avatar">Set as avatar</button>
       <button class="btn small danger" data-act="release" ${save.box.length <= 1 ? 'disabled' : ''}>Release</button>
-    </div>`;
+    </div></div>`;
 }
 const cap = s => String(s || '').replace(/\b\w/g, c => c.toUpperCase());
 function moveRow(id) {
@@ -552,7 +652,7 @@ function moveEditor(p) {
   const draw = () => {
     $('#modalContent').innerHTML = `<h2 id="modalTitle">${esc(sp(p).name)}'s moves</h2><p>Choose up to four. Level-up moves up to Lv. ${p.level} are free to relearn; TM moves can be taught for coins.</p>
       <div class="move-list">${pool.map(id => `<label class="move-row" style="cursor:pointer"><input type="checkbox" data-mv="${id}" ${chosen.includes(id) ? 'checked' : ''} style="min-height:0"> ${moveRow(id).replace(/^<div class="move-row">|<\/div>$/g, '')}</label>`).join('')}</div>
-      ${tms.length ? `<details style="margin-top:12px"><summary class="btn ghost small">Teach a TM (${tms.length} available)</summary><div class="move-list" style="margin-top:8px">${tms.map(id => `<div class="move-row"><span class="type ${tclass(M()[id].type)}">${esc(M()[id].type)}</span><span><b>${esc(M()[id].name)}</b><br><small>${esc(M()[id].desc || '')}</small></span><button class="btn small primary" data-tm="${id}">${tmPrice(id)} ◎</button></div>`).join('')}</div></details>` : ''}
+      ${tms.length ? `<details style="margin-top:12px"><summary class="btn ghost small">Teach a TM (${tms.length} available)</summary><div class="move-list" style="margin-top:8px">${tms.map(id => `<div class="move-row"><span class="type ${tclass(M()[id].type)}">${esc(M()[id].type)}</span><span><b>${esc(M()[id].name)}</b><br><small>${esc(M()[id].desc || '')}</small></span><button class="btn small primary" data-tm="${id}">${ic('coin')}${tmPrice(id)}</button></div>`).join('')}</div></details>` : ''}
       <div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="movesOk">Save moves (${chosen.length}/4)</button></div>`;
     $$('#modalContent [data-mv]').forEach(c => c.onchange = () => {
       const id = c.dataset.mv;
@@ -561,8 +661,8 @@ function moveEditor(p) {
     });
     $$('#modalContent [data-tm]').forEach(b => b.onclick = () => {
       const id = b.dataset.tm, price = tmPrice(id);
-      if (save.coins < price) { toast('Not enough coins.'); return; }
-      save.coins -= price; p.learned.push(id); pool.push(id); tms.splice(tms.indexOf(id), 1); persist(); toast(sp(p).name + ' can now use ' + M()[id].name + '!'); draw();
+      if (!spendCoins(price)) { toast('Not enough coins.'); return; }
+      p.learned.push(id); pool.push(id); tms.splice(tms.indexOf(id), 1); persist(); toast(sp(p).name + ' can now use ' + M()[id].name + '!'); draw();
     });
     $('#movesOk').onclick = () => { if (!chosen.length) { toast('Pick at least one move.'); return; } p.moves = chosen; persist(); closeModal(true); renderSummary(); };
   };
@@ -580,7 +680,9 @@ function doEvolve(p, o, then) {
   showModal(`<div class="reveal"><div class="stage">${artOf(fromNum, p.shiny)}</div><h2 id="modalTitle">What? ${esc(sp(p).name)} is evolving!</h2></div>`, { locked: true });
   setTimeout(() => {
     if (o.consume) { save.inventory[o.consume]--; if (save.inventory[o.consume] <= 0) delete save.inventory[o.consume]; }
+    const expBefore = p.exp;
     const r = G.evolve(p, o.into);
+    save.ledger.expGranted += p.exp - expBefore;
     save.stats.evolutions++;
     const n = sp(p).num;
     if (!save.ownedDex.includes(n)) save.ownedDex.push(n);
@@ -614,7 +716,7 @@ function applyItem(id, p) {
   if (it.exp || it.levelUp) {
     if (p.level >= 100) { toast("It won't have any effect."); return; }
     const amt = it.levelUp ? G.expForLevel(d.gr, p.level + 1) - p.exp : it.exp;
-    const lv = G.gainExp(p, amt);
+    const lv = grantExp(p, amt);
     const learned = learnNewMoves(p, lv);
     p.friendship = Math.min(255, p.friendship + (it.levelUp ? 3 : 1));
     done(name + (lv.length ? ' grew to Lv. ' + p.level + '!' : ' gained ' + fmt(amt) + ' Exp. Points!') + (learned.length ? ' Learned ' + learned.join(', ') + '!' : ''));
@@ -651,20 +753,35 @@ function applyItem(id, p) {
 }
 
 // ---------- Shop ----------
-const SHOP_CATS = { boxes: ['Pokémon boxes', 'poke-ball'], medicine: ['Medicine', 'potion'], training: ['Training', 'exp-candy-m'], held: ['Held items', 'leftovers'], evolution: ['Evolution', 'fire-stone'], key: ['Key items', 'shiny-charm'] };
+const SHOP_CATS = { boxes: ['Pokémon boxes', 'gift'], medicine: ['Medicine', 'heart'], training: ['Training', 'bolt'], held: ['Held items', 'gem'], evolution: ['Evolution', 'shiny'], key: ['Key items', 'lock'] };
+const BOX_TIER = { starter: 'starter', basic: 'basic', rare: 'rare', master: 'master', outbreak: 'outbreak' };
+// One discounted item per day (same for everyone), 30% off.
+function dailyDeal() {
+  const pool = Object.values(G.ITEMS).filter(i => ['medicine', 'training', 'held'].includes(i.cat) && !i.notForSale && i.price >= 60).map(i => i.id).sort();
+  return pool[G.dailyRng(G.todayKey(), 'deal').int(pool.length)];
+}
+const priceOf = id => { const it = G.ITEMS[id]; return id === dailyDeal() ? Math.round(it.price * 0.7) : it.price; };
 function shopEntries(cat) {
   if (cat === 'boxes') return Object.keys(G.BOXES).map(k => ({ id: 'box:' + k, box: k, name: G.BOXES[k].name, price: G.BOXES[k].price }));
-  return Object.values(G.ITEMS).filter(i => i.cat === cat && !i.notForSale).map(i => ({ id: i.id, name: i.name, price: i.price }));
+  return Object.values(G.ITEMS).filter(i => i.cat === cat && !i.notForSale).map(i => ({ id: i.id, name: i.name, price: priceOf(i.id) }));
 }
+function boxArt(k) { return k === 'outbreak' ? D()[G.dailyOutbreak(G.todayKey())].num : G.BOXES[k].art; }
 function renderShop() {
-  $('#shopCats').innerHTML = Object.entries(SHOP_CATS).map(([k, [n, s]]) => `<button role="tab" class="bag-cat ${ui.shopCat === k ? 'on' : ''}" data-shopcat="${k}" aria-selected="${ui.shopCat === k}">${pic(SPR + '/items/' + s + '.png', [], 'alt=""')}${n}</button>`).join('');
+  $('#shopCats').innerHTML = Object.entries(SHOP_CATS).map(([k, [n, icon]]) => `<button role="tab" class="bag-cat ${ui.shopCat === k ? 'on' : ''}" data-shopcat="${k}" aria-selected="${ui.shopCat === k}">${ic(icon)}${n}</button>`).join('');
   const list = shopEntries(ui.shopCat);
   if (!list.find(x => x.id === ui.shopSel)) ui.shopSel = list[0]?.id;
-  $('#shopList').innerHTML = list.map(x => {
-    const owned = x.box ? '' : (G.ITEMS[x.id].key ? (save.keyItems[x.id] ? 'Owned' : '') : save.inventory[x.id] ? '×' + save.inventory[x.id] : '');
-    const ico = x.box ? iconOf(x.box === 'outbreak' ? D()[G.dailyOutbreak(G.todayKey())].num : G.BOXES[x.box].art, false) : pic(G.itemSprite(x.id), [SPR + '/items/poke-ball.png'], 'alt=""');
-    return `<li><button class="bag-row ${ui.shopSel === x.id ? 'on' : ''}" data-shopsel="${x.id}" role="option" aria-selected="${ui.shopSel === x.id}">${ico}<span>${esc(x.name)} <span class="owned">${owned}</span></span><span class="qty">${fmt(x.price)} ◎</span></button></li>`;
+  const key = G.todayKey(), deal = dailyDeal(), ob = D()[G.dailyOutbreak(key)];
+  const left = Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0));
+  const features = `<div class="feature-row">
+    <button class="feature ${ui.shopSel === 'box:outbreak' ? 'on' : ''}" data-feature="box:outbreak" data-cat="boxes">${artOf(ob.num, false, ob.name)}<span><span class="k">Mass outbreak</span><b>${esc(ob.name)}</b><small>Shiny odds 1/64 · ${left} of 5 left today</small></span></button>
+    <button class="feature deal ${ui.shopSel === deal ? 'on' : ''}" data-feature="${deal}" data-cat="${G.ITEMS[deal].cat}">${pic(G.itemSprite(deal), [], 'alt="" class="px"')}<span><span class="k">Deal of the day · 30% off</span><b>${esc(G.ITEMS[deal].name)}</b><small>${fmt(priceOf(deal))} coins instead of ${fmt(G.ITEMS[deal].price)}</small></span></button></div>`;
+  const cards = list.map(x => {
+    if (x.box) return `<li><button class="item-card box-card tier-${BOX_TIER[x.box] || 'region'} ${ui.shopSel === x.id ? 'on' : ''}" data-shopsel="${x.id}"><span class="tile">${pic(img.art(boxArt(x.box), false), [img.icon(boxArt(x.box), false)], 'alt="" class="art" loading="lazy"')}</span><b>${esc(x.name)}</b><span class="price">${ic('coin')}${fmt(x.price)}</span></button></li>`;
+    const it = G.ITEMS[x.id];
+    const own = it.key ? (save.keyItems[x.id] ? 'Owned' : '') : (save.inventory[x.id] ? '×' + save.inventory[x.id] : '');
+    return `<li><button class="item-card ${ui.shopSel === x.id ? 'on' : ''}" data-shopsel="${x.id}">${own ? `<span class="own">${own}</span>` : ''}${x.id === deal ? '<span class="sale">-30%</span>' : ''}<span class="tile">${pic(G.itemSprite(x.id), [SPR + '/items/poke-ball.png'], 'alt="" loading="lazy"')}</span><b>${esc(x.name)}</b><span class="price">${ic('coin')}${x.id === deal ? `<s>${fmt(it.price)}</s>` : ''}${fmt(x.price)}</span></button></li>`;
   }).join('');
+  $('#shopMain').innerHTML = features + `<div class="section-title"><h2>${SHOP_CATS[ui.shopCat][0]}</h2><span class="tag">${list.length} items</span></div><ul class="item-grid">${cards}</ul>`;
   renderShopDetail();
   updateHud();
 }
@@ -677,45 +794,45 @@ function renderShopDetail() {
     const key = G.todayKey();
     const ob = k === 'outbreak' ? D()[G.dailyOutbreak(key)] : null;
     const left = k === 'outbreak' ? Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0)) : null;
-    const shiny = k === 'outbreak' ? '1/64' : '1/256';
-    el.innerHTML = `<div class="art">${artOf(ob ? ob.num : bx.art, false).replace('<img', '<img class="hd"')}</div><h3>${esc(bx.name)}</h3><p>${esc(bx.desc)}${ob ? ' Today: <b>' + esc(ob.name) + '</b>.' : ''}</p>
+    const charm = save.keyItems.shinycharm;
+    const shiny = k === 'outbreak' ? (charm ? '3/64' : '1/64') : (charm ? '3/256' : '1/256');
+    el.innerHTML = `<div class="art">${pic(img.art(boxArt(k), false), [img.icon(boxArt(k), false)], 'alt="" class="hd"')}</div><h3>${esc(bx.name)}</h3><p>${esc(bx.desc)}${ob ? ' Today: <b>' + esc(ob.name) + '</b>.' : ''}</p>
       <div class="odds">${bx.odds.map(o => `<div class="odds-row"><span>${esc(o[0])}</span><b>${o[1]}%</b></div>`).join('')}
-      <div class="odds-row"><span>Shiny chance${save.keyItems.shinycharm ? ' (Shiny Charm ×3)' : ''}</span><b>${save.keyItems.shinycharm ? (k === 'outbreak' ? '3/64' : '3/256') : shiny}</b></div>
+      <div class="odds-row"><span>Shiny${charm ? ' (Shiny Charm)' : ''}</span><b>${shiny}</b></div>
       <div class="odds-row"><span>Any mark (approx.)</span><b>~${save.keyItems.markcharm ? '20' : '7'}%</b></div>
       <div class="odds-row"><span>Hidden Ability</span><b>5%</b></div>${bx.perfectIvs ? `<div class="odds-row"><span>Guaranteed perfect IVs</span><b>${bx.perfectIvs}+</b></div>` : ''}</div>
-      <p class="muted">Pokémon arrive at Lv. ${G.boxLevel(k, topLevel())} (scales with your party). Legendaries always have 3 perfect IVs.</p>
-      <div class="price-row"><span class="price"><i class="ico-coin"></i>${fmt(bx.price)}</span>${left !== null ? `<span class="tag">${left}/5 left today</span>` : ''}<button class="btn primary" data-box="${k}" ${save.coins < bx.price || left === 0 ? 'disabled' : ''}>${save.coins < bx.price ? 'Not enough coins' : 'Open box'}</button></div>`;
+      <p class="muted">Arrives at Lv. ${G.boxLevel(k, topLevel())} (scales with your party).</p>
+      <div class="price-row"><span class="price">${ic('coin')}${fmt(bx.price)}</span>${left !== null ? `<span class="tag">${left} / 5 left today</span>` : ''}<button class="btn primary big" data-box="${k}" ${save.coins < bx.price || left === 0 ? 'disabled' : ''}>${save.coins < bx.price ? 'Not enough coins' : left === 0 ? 'Sold out today' : 'Open box'}</button></div>`;
     return;
   }
   const it = G.ITEMS[id];
   const own = it.key ? (save.keyItems[id] ? 1 : 0) : (save.inventory[id] || 0);
   const qty = it.key ? 1 : ui.shopQty;
-  const total = it.price * qty;
-  el.innerHTML = `<div class="art">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}</div><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>
-    ${it.hold ? '<p class="muted">Hold item · give it to a Pokémon from Boxes. Held items return to the Bag when taken.</p>' : ''}${it.battle ? '<p class="muted">Use it from the Bag during battle.</p>' : ''}
-    <p class="muted">In Bag: ${it.key ? (own ? 'Owned' : 'Not owned') : own}</p>
-    <div class="price-row"><span class="price"><i class="ico-coin"></i>${fmt(total)}</span>${it.key ? '' : `<span class="qty-step"><button data-qty="-1" aria-label="Decrease quantity">−</button><span>${qty}</span><button data-qty="1" aria-label="Increase quantity">+</button></span>`}
-    <button class="btn primary" data-buy="${id}" ${save.coins < total || (it.key && own) ? 'disabled' : ''}>${it.key && own ? 'Owned' : save.coins < total ? 'Not enough coins' : 'Buy'}</button></div>`;
+  const unit = priceOf(id), total = unit * qty;
+  const kinds = [it.hold && 'Hold item', it.battle && 'Usable in battle', isUsableOutside(it) && 'Use from Bag', it.key && 'Always active'].filter(Boolean);
+  el.innerHTML = `<div class="art">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}</div><h3>${esc(it.name)}</h3>
+    <div class="kind">${kinds.map(k => `<span class="tag">${k}</span>`).join('')}${id === dailyDeal() ? '<span class="tag pink">Deal of the day</span>' : ''}</div><p>${esc(it.desc)}</p>
+    <p class="muted">In your Bag: ${it.key ? (own ? 'owned' : 'not owned') : own}</p>
+    <div class="price-row"><span class="price">${ic('coin')}${fmt(total)}${unit !== it.price && qty === 1 ? ` <s>${fmt(it.price)}</s>` : ''}</span>${it.key ? '' : `<span class="qty-step"><button data-qty="-1" aria-label="Decrease quantity">${ic('minus')}</button><span>${qty}</span><button data-qty="1" aria-label="Increase quantity">${ic('plus')}</button></span>`}
+    <button class="btn primary big" data-buy="${id}" ${save.coins < total || (it.key && own) ? 'disabled' : ''}>${it.key && own ? 'Owned' : save.coins < total ? 'Not enough coins' : 'Buy'}</button></div>`;
 }
 function buyItem(id) {
   const it = G.ITEMS[id]; if (!it) return;
-  const qty = it.key ? 1 : ui.shopQty, total = it.price * qty;
-  if (save.coins < total) { toast('Not enough coins.'); return; }
-  if (it.key) { if (save.keyItems[id]) return; save.keyItems[id] = true; }
+  const qty = it.key ? 1 : ui.shopQty, total = priceOf(id) * qty;
+  if (it.key && save.keyItems[id]) return;
+  if (!spendCoins(total)) { toast('Not enough coins.'); return; }
+  if (it.key) save.keyItems[id] = true;
   else save.inventory[id] = (save.inventory[id] || 0) + qty;
-  save.coins -= total;
   afterProgress(); renderShop();
   toast('Bought ' + (qty > 1 ? qty + '× ' : '') + it.name + '!');
 }
-
 // ---------- Boxes (lootboxes) ----------
 function markCtx() { return { date: new Date(), weatherMark: G.dailyWeather(G.todayKey()).mark, markCharm: !!save.keyItems.markcharm, createdAt: save.createdAt }; }
 function openBox(kind, free) {
   const bx = G.BOXES[kind]; if (!bx) return;
   const key = G.todayKey();
   if (kind === 'outbreak') { if (save.outbreak.date !== key) save.outbreak = { date: key, opened: 0 }; if (save.outbreak.opened >= 5) { toast('Today\'s outbreak boxes are sold out. Come back tomorrow!'); return; } }
-  if (!free && save.coins < bx.price) { toast('Not enough coins.'); return; }
-  if (!free) save.coins -= bx.price;
+  if (!free && !spendCoins(bx.price)) { toast('Not enough coins.'); return; }
   if (kind === 'outbreak') save.outbreak.opened++;
   const rng = E.makeRng(Math.floor(Math.random() * 2 ** 32));
   const { species } = G.rollBox(kind, rng, { outbreak: G.dailyOutbreak(key) });
@@ -734,11 +851,11 @@ function revealModal(p, { title, subtitle, again } = {}) {
   preload(img.art(d.num, p.shiny));
   showModal(`<div class="reveal"><div class="stage"><div class="crate"></div></div><h2 id="modalTitle">Opening…</h2></div>`, { locked: true });
   const finish = () => {
-    const sparkles = p.shiny ? Array.from({ length: 6 }, (_, i) => `<span class="sparkle" style="left:${10 + i * 15}%;top:${(i * 37) % 80}%;animation-delay:${i * .15}s">✦</span>`).join('') : '';
+    const sparkles = p.shiny ? Array.from({ length: 6 }, (_, i) => `<svg class="sparkle" style="left:${10 + i * 15}%;top:${(i * 37) % 80}%;animation-delay:${i * .15}s" aria-hidden="true"><use href="assets/icons.svg#i-shiny"/></svg>`).join('') : '';
     showModal(`<div class="reveal ${p.shiny ? 'shiny' : ''}"><div class="stage">${sparkles}${artOf(d.num, p.shiny, d.name)}</div>
       <h2 id="modalTitle">${esc(title || (p.shiny ? 'A shiny ' + d.name + '!' : 'You got ' + d.name + '!'))}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
       ${typeChips(d.types)}
-      <div class="badges">${p.shiny ? '<span class="badge-chip gold">✦ Shiny</span>' : ''}${p.mark ? `<span class="badge-chip pink">${esc(G.MARKS[p.mark].name)} · “${esc(G.MARKS[p.mark].title)}”</span>` : ''}${p.abilitySlot === 'H' ? '<span class="badge-chip gold">Hidden Ability</span>' : ''}${perfect ? `<span class="badge-chip">${perfect}× Best IV</span>` : ''}
+      <div class="badges">${p.shiny ? `<span class="badge-chip gold">${ic('shiny')}Shiny</span>` : ''}${p.mark ? `<span class="badge-chip pink">${esc(G.MARKS[p.mark].name)} · “${esc(G.MARKS[p.mark].title)}”</span>` : ''}${p.abilitySlot === 'H' ? '<span class="badge-chip gold">Hidden Ability</span>' : ''}${perfect ? `<span class="badge-chip">${perfect}× Best IV</span>` : ''}
       <span class="badge-chip">Lv. ${p.level}</span><span class="badge-chip">${cap(p.nature)} nature</span><span class="badge-chip">Tera ${p.teraType}</span><span class="badge-chip">${esc(E.data.abilities[p.ability]?.name || p.ability)}</span>${p.size === 255 ? '<span class="badge-chip">Jumbo size</span>' : p.size === 0 ? '<span class="badge-chip">Mini size</span>' : ''}</div>
       <p class="muted">${G.ivTotalJudge(ivSum)} ${save.party.includes(p.uid) ? 'Added to your party.' : 'Sent to your Boxes.'}</p>
       <div class="row-btns" style="justify-content:center"><button class="btn ghost" id="revealBoxes">View in Boxes</button>${again ? `<button class="btn ghost" id="revealAgain" ${save.coins < G.BOXES[again].price ? 'disabled' : ''}>Open another (${G.BOXES[again].price})</button>` : ''}<button class="btn primary" data-close autofocus>Continue</button></div></div>`);
@@ -749,18 +866,19 @@ function revealModal(p, { title, subtitle, again } = {}) {
 }
 
 // ---------- Bag ----------
-const BAG_CATS = { medicine: 'Medicine', training: 'Training', held: 'Held items', evolution: 'Evolution', key: 'Key items', collectible: 'Other' };
+const BAG_CATS = { medicine: ['Medicine', 'heart'], training: ['Training', 'bolt'], held: ['Held items', 'gem'], evolution: ['Evolution', 'shiny'], key: ['Key items', 'lock'], collectible: ['Other', 'bag'] };
+function bagIds(cat) { return cat === 'key' ? Object.keys(save.keyItems).filter(k => save.keyItems[k] && G.ITEMS[k]) : Object.keys(save.inventory).filter(id => G.ITEMS[id]?.cat === cat && save.inventory[id] > 0); }
 function renderBag() {
-  $('#bagCats').innerHTML = Object.entries(BAG_CATS).map(([k, n]) => `<button role="tab" class="bag-cat ${ui.bagCat === k ? 'on' : ''}" data-bagcat="${k}" aria-selected="${ui.bagCat === k}">${n}</button>`).join('');
-  const ids = ui.bagCat === 'key' ? Object.keys(save.keyItems).filter(k => save.keyItems[k] && G.ITEMS[k]) : Object.keys(save.inventory).filter(id => G.ITEMS[id]?.cat === ui.bagCat && save.inventory[id] > 0);
+  $('#bagCats').innerHTML = Object.entries(BAG_CATS).map(([k, [n, icon]]) => `<button role="tab" class="bag-cat ${ui.bagCat === k ? 'on' : ''}" data-bagcat="${k}" aria-selected="${ui.bagCat === k}">${ic(icon)}${n}<span class="n">${bagIds(k).length || ''}</span></button>`).join('');
+  const ids = bagIds(ui.bagCat);
   if (!ids.includes(ui.bagSel)) ui.bagSel = ids[0];
-  $('#bagList').innerHTML = ids.length ? ids.map(id => `<li><button class="bag-row ${ui.bagSel === id ? 'on' : ''}" data-bagsel="${id}" role="option" aria-selected="${ui.bagSel === id}">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}<span>${esc(G.ITEMS[id].name)}</span><span class="qty">${ui.bagCat === 'key' ? '' : '×' + save.inventory[id]}</span></button></li>`).join('') : '<li class="empty">Nothing here yet. <button class="btn small primary" data-go="shop">Visit the Shop</button></li>';
+  $('#bagMain').innerHTML = `<div class="section-title"><h2>${BAG_CATS[ui.bagCat][0]}</h2></div>` + (ids.length ? `<ul class="item-grid">${ids.map(id => `<li><button class="item-card ${ui.bagSel === id ? 'on' : ''}" data-bagsel="${id}">${ui.bagCat === 'key' ? '' : `<span class="own">×${save.inventory[id]}</span>`}<span class="tile">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt="" loading="lazy"')}</span><b>${esc(G.ITEMS[id].name)}</b></button></li>`).join('')}</ul>`
+    : `<div class="bag-empty">${ic('bag')}<b>Nothing in this pocket yet.</b><button class="btn primary" data-go="shop">Visit the Shop</button></div>`);
   const id = ui.bagSel, it = G.ITEMS[id];
   $('#bagDetail').innerHTML = it ? `<div class="art">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}</div><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>
-    <div class="row-btns">${isUsableOutside(it) ? '<button class="btn primary" data-baguse>Use</button>' : ''}${it.hold ? '<button class="btn ghost" data-baggive>Give to a Pokémon</button>' : ''}${it.battle ? '<span class="tag">Usable in battle</span>' : ''}${it.key ? '<span class="tag">Always active</span>' : ''}</div>` : '';
+    <div class="price-row">${isUsableOutside(it) ? '<button class="btn primary big" data-baguse>Use</button>' : ''}${it.hold ? '<button class="btn ghost" data-baggive>Give to a Pokémon</button>' : ''}${it.battle ? '<span class="tag">Use it during battle</span>' : ''}${it.key ? '<span class="tag cyan">Always active</span>' : ''}</div>` : '<div class="bag-empty">Select an item.</div>';
   updateHud();
 }
-
 // ---------- Pokédex ----------
 function dexList() {
   const q = ($('#dexQuery').value || '').trim().toLowerCase(), f = $('#dexFilter').value, g = +$('#dexGen').value;
@@ -779,7 +897,7 @@ function renderDex() {
   const list = dexList();
   $('#dexResults').innerHTML = list.slice(0, ui.dexShown).map(([id, d]) => {
     const own = save.ownedDex.includes(d.num), sh = save.shinyDex.includes(d.num);
-    return `<button class="dex-card ${own ? '' : 'unowned'}" data-dex="${id}">${sh ? '<span class="badge shiny-star">✦</span>' : own ? '<span class="badge">●</span>' : ''}${iconOf(d.num, false, d.name)}<small>No. ${String(d.num).padStart(4, '0')}</small><b>${esc(d.name)}</b></button>`;
+    return `<button class="dex-card ${own ? '' : 'unowned'}" data-dex="${id}">${sh ? '<svg class="badge shiny-ic" aria-label="shiny owned"><use href="assets/icons.svg#i-shiny"/></svg>' : own ? '<span class="badge own" aria-label="owned"></span>' : ''}${iconOf(d.num, false, d.name)}<small>No. ${String(d.num).padStart(4, '0')}</small><b>${esc(d.name)}</b></button>`;
   }).join('') || '<div class="empty">No Pokémon match. Try a name, number or type.</div>';
   $('#loadMore').classList.toggle('hidden', list.length <= ui.dexShown);
 }
@@ -790,7 +908,7 @@ async function showDexEntry(id) {
   const chain = []; let root = id; while (D()[root].prevo && D()[D()[root].prevo]) root = D()[root].prevo;
   const walk = (x, depth) => { chain.push(x); for (const e of D()[x].evos || []) walk(e, depth + 1); }; walk(root, 0);
   const ls = G.levelUpMoves(id).filter(m => M()[m.id]);
-  showModal(`<div class="eyebrow">No. ${String(d.num).padStart(4, '0')} · Gen ${d.gen}</div><h2 id="modalTitle">${esc(d.name)} ${sh ? '<span class="shiny-star">✦</span>' : ''}</h2>
+  showModal(`<div class="eyebrow">No. ${String(d.num).padStart(4, '0')} · Gen ${d.gen}</div><h2 id="modalTitle">${esc(d.name)} ${sh ? shinyIc() : ''}</h2>
     <div style="display:grid;grid-template-columns:minmax(0,200px) 1fr;gap:16px;align-items:start"><div>${artOf(d.num, sh)}</div><div style="display:grid;gap:10px">${typeChips(d.types)}
     <p id="dexFlavor" class="muted">Loading Pokédex entry…</p>
     <dl class="kv"><dt>Abilities</dt><dd>${Object.entries(d.ab).map(([k, a]) => `<span title="${esc(E.data.abilities[E.toId(a)]?.desc || '')}">${esc(a)}${k === 'H' ? ' (H)' : ''}</span>`).join(', ')}</dd><dt>Height / weight</dt><dd>${d.ht} m · ${d.wt} kg</dd><dt>EV yield</dt><dd>${E.STATS.filter((k, i) => d.ey[i]).map(k => d.ey[E.STATS.indexOf(k)] + ' ' + STAT_LABEL[k]).join(', ')}</dd><dt>Growth</dt><dd>${G.GROWTH_NAMES[d.gr]}</dd><dt>Status</dt><dd>${own ? 'Owned' : 'Not owned yet'}</dd></dl></div></div>
@@ -812,11 +930,15 @@ async function showDexEntry(id) {
 function renderProfile() {
   const score = G.trainerScore(save);
   const show = save.showcase.map(byUid).filter(Boolean);
-  $('#trainerCard').innerHTML = `<div class="tc-head">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2><button class="btn small ghost" id="renameTrainer">Edit name</button></div></div>
+  const integ = save.integrity || { status: 'ok' };
+  $('#trainerCard').innerHTML = `<div class="tc-head">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2>
+    <div class="tc-verify ${ranked() ? 'ok' : 'bad'}">${ic(ranked() ? 'shield' : 'warn')}${ranked() ? 'Verified save · ranked' : 'Unranked save'}</div>
+    <div class="row-btns" style="margin-top:8px"><button class="btn small ghost" id="renameTrainer">Edit name</button></div></div></div>
+    ${ranked() ? '' : `<div class="integrity" style="margin-top:14px">${ic('warn')}<div><b>This save failed integrity checks, so it won't appear on leaderboards.</b> You can keep playing normally.<ul>${(integ.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul></div></div>`}
     <div class="tc-stats"><div><small>Trainer score</small><b>${fmt(score)}</b></div><div><small>Wins</small><b>${fmt(save.wins)}</b></div><div><small>Battles</small><b>${fmt(save.battles)}</b></div><div><small>Pokédex</small><b>${save.ownedDex.length}</b></div><div><small>Shiny species</small><b>${save.shinyDex.length}</b></div><div><small>Best streak</small><b>${save.checkin.best || 0} days</b></div><div><small>Daily sweeps</small><b>${save.stats.dailySweeps}</b></div><div><small>Medals</small><b>${Object.keys(save.medals).length}/${G.MEDALS.length}</b></div></div>
     <div class="section-title"><h2>Showcase</h2><span class="muted">Shown on leaderboards</span></div>
-    <div class="showcase-slots">${[0, 1, 2].map(i => { const p = show[i]; return p ? `<button class="showcase-slot filled" data-showslot="${i}">${artOf(sp(p).num, p.shiny)}<b>${esc(G.displayName(p))}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</b><small>Lv. ${p.level} · ${E.STATS.filter(k => p.ivs[k] === 31).length}× Best IV</small></button>` : `<button class="showcase-slot" data-showslot="${i}"><span class="muted">+ Add a Pokémon</span></button>`; }).join('')}</div>
-    <div class="row-btns"><button class="btn ghost" id="shareCard">Copy trainer card text</button></div>`;
+    <div class="showcase-slots">${[0, 1, 2].map(i => { const p = show[i]; return p ? `<button class="showcase-slot filled" data-showslot="${i}">${artOf(sp(p).num, p.shiny)}<b>${esc(G.displayName(p))}${p.shiny ? shinyIc() : ''}</b><small>Lv. ${p.level} · ${E.STATS.filter(k => p.ivs[k] === 31).length}× Best IV</small></button>` : `<button class="showcase-slot" data-showslot="${i}"><span class="muted">${ic('plus')} Add a Pokémon</span></button>`; }).join('')}</div>
+    <div class="row-btns"><button class="btn ghost" id="shareCard">${ic('copy')}Copy trainer card text</button></div>`;
   $('#animationsToggle').checked = !!save.settings.animations;
   $('#effectsToggle').checked = !!save.settings.reducedEffects;
   $('#damageToggle').checked = save.settings.showDamage !== false;
@@ -825,38 +947,80 @@ function renderProfile() {
 }
 function renderMedals() {
   $('#medalCount').textContent = Object.keys(save.medals).length + ' / ' + G.MEDALS.length;
-  $('#medalGrid').innerHTML = G.MEDALS.map(m => `<div class="medal ${save.medals[m.id] ? '' : 'locked'}"><i aria-hidden="true"></i><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small><small>${save.medals[m.id] ? 'Earned ' + save.medals[m.id] : 'Reward: ' + m.reward + ' coins'}</small></span></div>`).join('');
+  $('#medalGrid').innerHTML = G.MEDALS.map(m => `<div class="medal ${save.medals[m.id] ? '' : 'locked'}"><span class="m">${ic(save.medals[m.id] ? 'medal' : 'lock')}</span><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small><small>${save.medals[m.id] ? 'Earned ' + save.medals[m.id] : 'Reward: ' + m.reward + ' coins'}</small></span></div>`).join('');
 }
-
 // ---------- Export / import ----------
-function exportPayload() { return { app: 'PokeDuel', kind: 'save', exportVersion: 1, exportedAt: new Date().toISOString(), save }; }
-function exportFile() {
-  const blob = new Blob([JSON.stringify(exportPayload(), null, 2)], { type: 'application/json' });
+// Asks for a password (twice when creating one). Resolves to the password or null.
+function askPassword({ title, text, confirm }) {
+  return new Promise(resolve => {
+    showModal(`<div class="eyebrow">${ic('lock')} Protected save</div><h2 id="modalTitle">${esc(title)}</h2><p>${text}</p>
+      <label class="field"><span>Password</span><input type="password" id="pw1" minlength="6" autocomplete="${confirm ? 'new-password' : 'current-password'}" autofocus></label>
+      ${confirm ? '<label class="field" style="margin-top:10px"><span>Repeat password</span><input type="password" id="pw2" autocomplete="new-password"></label>' : ''}
+      <p class="muted" id="pwErr" style="margin-top:8px"></p>
+      <div class="row-btns"><button class="btn ghost" id="pwCancel">Cancel</button><button class="btn primary" id="pwOk">${confirm ? 'Encrypt and export' : 'Unlock'}</button></div>`, { onClose: () => resolve(null) });
+    const ok = () => {
+      const a = $('#pw1').value, b = confirm ? $('#pw2').value : a;
+      if (a.length < 6) { $('#pwErr').textContent = 'Use at least 6 characters.'; return; }
+      if (a !== b) { $('#pwErr').textContent = 'The passwords don’t match.'; return; }
+      modalOnClose = null; closeModal(true); resolve(a);
+    };
+    $('#pwOk').onclick = ok;
+    $('#pwCancel').onclick = () => closeModal(true);
+    $$('#modalContent input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); }));
+  });
+}
+async function makeEnvelope() {
+  const pw = await askPassword({ title: 'Choose an export password', text: 'Your save will be encrypted with this password. You will need it to import the save on any device. It can’t be recovered if you forget it.', confirm: true });
+  if (!pw) return null;
+  toast('Encrypting…');
+  return S.encryptSave(JSON.parse(JSON.stringify(save)), pw);
+}
+async function exportFile() {
+  const env = await makeEnvelope(); if (!env) return;
+  const blob = new Blob([JSON.stringify(env)], { type: 'application/json' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'pokeduel-save-' + G.todayKey() + '.json';
+  a.href = URL.createObjectURL(blob); a.download = 'pokeduel-save-' + G.todayKey() + '.pokeduel';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast('Save exported.');
+  toast('Protected save exported.');
 }
 const toCode = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
 const fromCode = s => JSON.parse(decodeURIComponent(escape(atob(s.trim()))));
 async function copyCode() {
-  const code = toCode(exportPayload());
-  try { await navigator.clipboard.writeText(code); toast('Save code copied to clipboard.'); }
-  catch (e) { showModal(`<h2 id="modalTitle">Your save code</h2><p>Copy this text and keep it somewhere safe.</p><textarea readonly>${esc(code)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`); }
+  const env = await makeEnvelope(); if (!env) return;
+  const code = toCode(env);
+  try { await navigator.clipboard.writeText(code); toast('Protected save code copied to clipboard.'); }
+  catch (e) { showModal(`<h2 id="modalTitle">Your save code</h2><p>Copy this text and keep it somewhere safe. It is encrypted with your password.</p><textarea readonly>${esc(code)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`); }
 }
-function parseImport(text) {
+// Returns { save, unprotected } or throws a readable error.
+async function parseImport(text) {
   let obj;
-  try { obj = JSON.parse(text); } catch (e) { try { obj = fromCode(text); } catch (e2) { throw new Error('This isn\'t a PokeDuel save file or code.'); } }
+  try { obj = JSON.parse(text); } catch (e) { try { obj = fromCode(text); } catch (e2) { throw new Error('This isn’t a PokeDuel save file or code.'); } }
+  if (S.isEnvelope(obj)) {
+    const pw = await askPassword({ title: 'Enter the save password', text: 'This save is protected. Enter the password that was used when it was exported.' });
+    if (!pw) return null;
+    const raw = await S.decryptSave(obj, pw);
+    if (!S.verifySeal(raw)) throw new Error('This save was modified after it was exported, so it can’t be imported.');
+    const s = G.migrateSave(raw);
+    if (!s) throw new Error('This save is from an unsupported version.');
+    const issues = G.auditSave(s);
+    if (issues.length) throw new Error('This save failed integrity checks:\n• ' + issues.join('\n• '));
+    return { save: s, unprotected: false };
+  }
+  // Older, unencrypted exports (made before save protection) still import, but unranked.
   const raw = obj?.app === 'PokeDuel' ? obj.save : obj;
   const s = G.migrateSave(raw);
   if (!s) throw new Error('This save is from an unsupported version.');
-  return s;
+  flag(s, 'Imported from an unprotected save file (made before save protection), so it can’t be verified.');
+  return { save: s, unprotected: true };
 }
-function previewImport(text) {
-  let s;
-  try { s = parseImport(text); } catch (e) { showModal(`<h2 id="modalTitle">Import failed</h2><p>${esc(e.message)}</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
-  confirmBox('Import this save?', `<b>${esc(s.trainerName || 'Trainer')}</b> · ${s.box.length} Pokémon · ${s.ownedDex.length} species · ${fmt(s.coins)} coins · last played ${s.lastActive ? new Date(s.lastActive).toLocaleString() : 'unknown'}.<br><br>This replaces the save in this browser${currentUser ? ' and your cloud save' : ''}. A backup of your current save is kept in this browser.`, 'Import save', () => {
+async function previewImport(text) {
+  let res;
+  try { res = await parseImport(text); }
+  catch (e) { showModal(`<h2 id="modalTitle">Import refused</h2><p style="white-space:pre-line">${esc(e.message)}</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
+  if (!res) return;
+  const s = res.save;
+  confirmBox('Import this save?', `<b>${esc(s.trainerName || 'Trainer')}</b> · ${s.box.length} Pokémon · ${s.ownedDex.length} species · ${fmt(s.coins)} coins · last played ${s.lastActive ? new Date(s.lastActive).toLocaleString() : 'unknown'}.<br><br>${res.unprotected ? '<b>This file is unprotected, so the save will be unranked (no leaderboards).</b><br><br>' : ''}This replaces the save in this browser${currentUser ? ' and your cloud save' : ''}. A backup of your current save is kept in this browser.`, 'Import save', () => {
     try { localStorage.setItem(BACKUP_KEY, JSON.stringify(save)); } catch (e) {}
     save = s; afterProgress(); afterSaveReplaced(); toast('Save imported!');
   }, true);
@@ -885,10 +1049,7 @@ function startBattle(tier) {
     const b = E.createBattle({ player: { name: trainerName(), team: buildPlayerTeam() }, enemy: { name: trainer.name, team: trainer.team }, seed, ai: G.DAILY_TIERS[tier].ai, label: trainer.name });
     if (tier !== 'practice') { save.daily[tier] = { result: 'pending', date: key }; persist(); }
     battleState = { b, tier, trainer, ui: { p: null, e: null }, tera: false, menu: 'main', playing: false, ko: [], startedTurn: 1, itemsUsed: 0 };
-    const arena = $('#battlefield');
-    arena.className = 'arena theme-' + tier;
-    const bg = assets.backgrounds['battle-' + tier];
-    arena.style.setProperty('--arena-bg', bg ? `url("assets/backgrounds/${bg}")` : 'none');
+    setupArena(tier);
     $('#battleLabel').textContent = tier === 'practice' ? 'Practice' : 'Daily · ' + G.DAILY_TIERS[tier].name;
     $('#battleLog').textContent = '';
     $('#battleControls').innerHTML = '';
@@ -901,6 +1062,18 @@ function startBattle(tier) {
   if (tier === 'practice') begin();
   else confirmBox('Daily battle · ' + G.DAILY_TIERS[tier].name, `You get <b>one attempt</b> per day. Leaving or reloading during the battle counts as a loss. Your party of ${partyMons().length} will battle ${G.DAILY_TIERS[tier].size} Pokémon.`, 'Battle!', begin);
 }
+// Places sprites on the painted platforms of the arena art (positions from assets/manifest.json).
+function setupArena(tier) {
+  const arena = $('#battlefield');
+  const cfg = assets.tiers?.[tier] || {};
+  const art = assets.arenas?.[cfg.arena];
+  arena.className = 'arena theme-' + tier + ' light-' + (cfg.light || 'day') + (art ? ' has-art' : '');
+  arena.style.setProperty('--arena-bg', art ? `url("assets/backgrounds/${art.file}")` : 'none');
+  const foe = art?.foe || { x: 76, y: 58, w: 26 }, me = art?.player || { x: 28, y: 92, w: 40 };
+  // Square sprite boxes sized from the platform width; feet sit near the platform centre.
+  Object.assign($('#foeSlot').style, { left: foe.x + '%', bottom: (100 - foe.y - 2) + '%', width: foe.w * 0.62 + '%' });
+  Object.assign($('#playerSlot').style, { left: me.x + '%', bottom: (100 - me.y - 3) + '%', width: me.w * 0.6 + '%' });
+}
 function monView(side) { return E.active(battleState.b, side); }
 function renderStatusCard(side) {
   const s = battleState.ui[side]; if (!s) return;
@@ -908,9 +1081,9 @@ function renderStatusCard(side) {
   const pct = Math.max(0, s.hp / s.maxhp * 100);
   const boosts = Object.entries(mon?.boosts || {}).filter(([, v]) => v).map(([k, v]) => `<span class="${v > 0 ? 'up' : 'down'}">${({ atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe', accuracy: 'Acc', evasion: 'Eva' })[k]} ${v > 0 ? '+' : ''}${v}</span>`).join('');
   const vol = mon ? ['confusion', 'leechseed', 'substitute', 'taunt', 'encore'].filter(v => mon.volatiles[v]).map(v => `<span>${({ confusion: 'Confused', leechseed: 'Seeded', substitute: 'Substitute', taunt: 'Taunted', encore: 'Encore' })[v]}</span>`).join('') : '';
-  $(side === 'p' ? '#playerCard' : '#foeCard').innerHTML = `<div class="sc-top">${s.tera ? `<span class="sc-tera" title="Terastallized: ${esc(s.tera)}"></span>` : ''}<b>${esc(s.name)}</b>${genderIcon(s.gender)}${s.status ? `<span class="status-chip st-${s.status}">${s.status.toUpperCase()}</span>` : ''}<span class="lvl">Lv. ${s.level}</span></div>
+  $(side === 'p' ? '#playerCard' : '#foeCard').innerHTML = `<div class="sc-top">${s.tera ? `<span class="sc-tera" title="Terastallized: ${esc(s.tera)}">${ic('gem')}</span>` : ''}<b>${esc(s.name)}</b>${genderIcon(s.gender)}${s.status ? `<span class="status-chip st-${s.status}">${s.status.toUpperCase()}</span>` : ''}<span class="lvl">Lv. ${s.level}</span></div>
     <div class="hp"><span class="hp-label">HP</span><span class="hp-bar"><i class="${hpCls(pct)}" style="width:${pct}%"></i></span></div>
-    ${side === 'p' ? `<div class="sc-hpnum">${Math.max(0, s.hp)} / ${s.maxhp}</div>` : ''}<div class="sc-boosts">${boosts}${vol}${s.tera ? `<span class="type ${tclass(s.tera)}">${esc(s.tera)}</span>` : ''}</div>`;
+    ${side === 'p' ? `<div class="sc-hpnum">${Math.max(0, s.hp)} / ${s.maxhp}</div>` : ''}<div class="sc-boosts">${boosts}${vol}${s.tera ? typeImg(s.tera) : ''}</div>`;
 }
 function renderFoeTeam() {
   const team = battleState.b.sides.e.team;
@@ -918,7 +1091,7 @@ function renderFoeTeam() {
 }
 function renderFieldChips() {
   const b = battleState.b, f = b.field, out = [];
-  const w = { RainDance: '☂ Rain', sunnyday: '☀ Harsh sun', Sandstorm: '≋ Sandstorm', snowscape: '❄ Snow', hail: '❄ Hail' }[f.weather];
+  const w = { RainDance: 'Rain', sunnyday: 'Harsh sun', Sandstorm: 'Sandstorm', snowscape: 'Snow', hail: 'Hail' }[f.weather];
   if (w) out.push(w);
   if (f.terrain) out.push({ electricterrain: 'Electric Terrain', grassyterrain: 'Grassy Terrain', psychicterrain: 'Psychic Terrain', mistyterrain: 'Misty Terrain' }[f.terrain]);
   if (f.trickRoom) out.push('Trick Room');
@@ -930,15 +1103,15 @@ function renderFieldChips() {
   $('#fieldChips').innerHTML = out.map(x => `<span>${esc(x)}</span>`).join('');
 }
 function setSprite(side, ev) {
+  // HOME renders are high resolution and match the painted arenas; the player's is mirrored to face the foe.
   const el = side === 'p' ? $('#playerSprite') : $('#enemySprite');
   const front = side === 'e';
-  const src = front ? img.front(ev.num, ev.shiny) : img.back(ev.num, ev.shiny);
-  el.dataset.fb = [front ? img.front(ev.num, false) : img.back(ev.num, false), img.art(ev.num, ev.shiny), img.icon(ev.num, ev.shiny)].join('|');
+  el.dataset.fb = [img.art(ev.num, false), front ? img.front(ev.num, ev.shiny) : img.back(ev.num, ev.shiny), img.icon(ev.num, ev.shiny)].join('|');
   el.style.visibility = '';
   el.alt = ev.name;
   el.className = 'battle-sprite ' + (front ? 'foe' : 'mine') + ' gone';
-  el.onload = () => { el.classList.toggle('flip', !front && el.src.includes('/home/')); };
-  el.src = src;
+  el.onload = () => el.classList.toggle('flip', !front && el.src.includes('/home/'));
+  el.src = img.art(ev.num, ev.shiny);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('gone')));
 }
 function anim(sel, cls) {
@@ -981,6 +1154,7 @@ async function playEvents(events) {
   for (const s of ['p', 'e']) renderStatusCard(s);
   st.playing = false;
 }
+const CAT_ICON = { Physical: 'physical', Special: 'special', Status: 'status' };
 function renderCommands() {
   const st = battleState; if (!st) return;
   const b = st.b, req = E.getRequest(b);
@@ -991,7 +1165,7 @@ function renderCommands() {
   if (st.menu === 'fight') {
     if (req.locked) { submit({ type: 'move', index: 0 }); return; }
     const foe = monView('e');
-    el.innerHTML = req.moves.map(m => {
+    el.innerHTML = `<div class="moves-grid">${req.struggle ? `<button class="move-btn t-normal" data-mi="-1"><span class="mtop">${typeImg('Normal')}</span><b>Struggle</b><span class="mbot">Out of PP</span></button>` : req.moves.map(m => {
       const mv = M()[m.id];
       let effTxt = '';
       if (mv.cat !== 'Status' && foe) {
@@ -999,13 +1173,15 @@ function renderCommands() {
         effTxt = e === 0 ? '<span class="eff no">No effect</span>' : e > 1 ? '<span class="eff se">Effective</span>' : e < 1 ? '<span class="eff nve">Not very effective</span>' : '';
       }
       let dmg = '';
-      if (save.settings.showDamage !== false && mv.cat !== 'Status' && foe) { const r = E.damageRange(b, me, foe, m.id); if (r && r.hi) dmg = ' · ~' + Math.round(r.lo / foe.maxhp * 100) + '–' + Math.min(999, Math.round(r.hi / foe.maxhp * 100)) + '%'; }
-      return `<button class="move-btn ${tclass(m.type)}" data-mi="${m.index}" ${m.disabled ? 'disabled' : ''} title="${esc(mv.desc || '')}">${effTxt}<span class="tball"></span><span><b>${esc(m.name)}</b><small>${esc(m.type)} · ${mv.cat === 'Status' ? 'Status' : mv.bp ? mv.bp + ' BP' : 'Varies'}${dmg}${E.moveSupport(m.id) === 'partial' ? ' · <span class="partial">simplified</span>' : ''}</small></span><span class="pp">${m.pp}/${m.maxpp}</span></button>`;
-    }).join('') + `<div class="cmd-row">${req.canTera ? `<button class="tera-toggle ${st.tera ? 'on' : ''}" id="teraBtn" aria-pressed="${st.tera}"><span class="gem"></span>Tera ${esc(req.teraType)}</button>` : '<span></span>'}<button class="cmd back-cmd" data-cmd="back">Back</button></div>`;
-    if (req.struggle) el.insertAdjacentHTML('afterbegin', '<button class="cmd fight" data-mi="-1">Struggle</button>');
+      if (save.settings.showDamage !== false && mv.cat !== 'Status' && foe) { const r = E.damageRange(b, me, foe, m.id); if (r && r.hi) dmg = Math.round(r.lo / foe.maxhp * 100) + '–' + Math.min(999, Math.round(r.hi / foe.maxhp * 100)) + '%'; }
+      const info = mv.cat === 'Status' ? 'Status' : (mv.bp ? mv.bp + ' power' : 'Varies') + (mv.acc === true ? '' : ' · ' + mv.acc + '%');
+      return `<button class="move-btn ${tclass(m.type)}" data-mi="${m.index}" ${m.disabled ? 'disabled' : ''} title="${esc(mv.desc || '')}">${effTxt}<span class="mtop">${typeImg(m.type)}<span class="cat" title="${mv.cat}">${ic(CAT_ICON[mv.cat] || 'status')}</span></span><b>${esc(m.name)}</b><span class="mbot"><span>${info}${dmg ? ' · ' + dmg : ''}${E.moveSupport(m.id) === 'partial' ? ' · simplified' : ''}</span><span class="pp">${m.pp}/${m.maxpp}</span></span></button>`;
+    }).join('')}</div><div class="cmd-foot">${req.canTera ? `<button class="tera-toggle ${st.tera ? 'on' : ''}" id="teraBtn" aria-pressed="${st.tera}">${ic('gem')}Terastallize · ${esc(req.teraType)}</button>` : '<span></span>'}<button class="cmd back" data-cmd="back">${ic('back')}Back</button></div>`;
+    $('#battleLog').textContent = 'Choose a move for ' + me.name + '. Keys 1–4 also work.';
     return;
   }
-  el.innerHTML = `<button class="cmd fight" data-cmd="fight">Fight</button><div class="cmd-row"><button class="cmd" data-cmd="party" ${req.trapped || !req.switches.length ? 'disabled' : ''}>Pokémon</button><button class="cmd" data-cmd="bag" ${st.tier !== 'practice' && st.tier !== 'easy' && st.itemsUsed >= 3 ? 'disabled title="Item limit reached"' : ''}>Bag</button></div><button class="cmd" data-cmd="run">${st.tier === 'practice' ? 'Run' : 'Forfeit'}</button>`;
+  const bagLocked = st.tier !== 'practice' && st.tier !== 'easy' && st.itemsUsed >= 3;
+  el.innerHTML = `<div class="cmd-grid"><button class="cmd fight" data-cmd="fight">${ic('battle')}Fight</button><button class="cmd party" data-cmd="party" ${req.trapped || !req.switches.length ? 'disabled' : ''}>${ic('swap')}Pokémon</button><button class="cmd bag" data-cmd="bag" ${bagLocked ? 'disabled title="Item limit reached"' : ''}>${ic('bag')}Bag</button><button class="cmd run" data-cmd="run">${ic('run')}${st.tier === 'practice' ? 'Run' : 'Forfeit'}</button></div>`;
   $('#battleLog').textContent = 'What will ' + me.name + ' do?';
 }
 function renderPartyPicker(forced) {
@@ -1014,7 +1190,7 @@ function renderPartyPicker(forced) {
   $('#battleLog').textContent = forced ? (req.reason === 'pivot' ? 'Choose a Pokémon to switch in.' : 'Choose your next Pokémon.') : 'Switch to which Pokémon?';
   showModal(`<h2 id="modalTitle">${forced ? 'Send out a Pokémon' : 'Switch Pokémon'}</h2><div class="party-pick">${team.map((m, i) => {
     const ok = req.switches?.includes(i) || (!forced && req.switches?.includes(i));
-    return `<button data-swap="${i}" ${ok ? '' : 'disabled'}>${iconOf(m.num, m.shiny)}<span><b>${esc(m.name)}</b> ${m.status ? `<span class="status-chip st-${m.status}">${m.status.toUpperCase()}</span>` : ''}<br><small class="muted">Lv. ${m.level} · ${m.fainted ? 'Fainted' : m.hp + '/' + m.maxhp + ' HP'}${i === b.sides.p.active && !m.fainted ? ' · in battle' : ''}</small><span class="hp"><span class="hp-bar"><i class="${hpCls(m.hp / m.maxhp * 100)}" style="width:${m.hp / m.maxhp * 100}%"></i></span></span></span></button>`;
+    return `<button data-swap="${i}" ${ok ? '' : 'disabled'}>${iconOf(m.num, m.shiny)}<span><b>${esc(m.name)}</b> ${genderIcon(m.gender)} ${m.status ? `<span class="status-chip st-${m.status}">${m.status.toUpperCase()}</span>` : ''}<br><small class="muted">Lv. ${m.level} · ${m.fainted ? 'Fainted' : m.hp + '/' + m.maxhp + ' HP'}${i === b.sides.p.active && !m.fainted ? ' · in battle' : ''}</small><span class="hp"><span class="hp-bar"><i class="${hpCls(m.hp / m.maxhp * 100)}" style="width:${m.hp / m.maxhp * 100}%"></i></span></span></span></button>`;
   }).join('')}</div>${forced ? '' : '<div class="row-btns"><button class="btn ghost" data-close>Cancel</button></div>'}`, { locked: forced, wide: true });
   $$('#modalContent [data-swap]').forEach(btn => btn.onclick = () => { closeModal(true); submit({ type: 'switch', index: +btn.dataset.swap }); });
 }
@@ -1073,7 +1249,7 @@ async function finishBattle() {
   const evoQueue = [];
   for (const p of party) {
     const g = gains[p.uid];
-    if (g.exp) { g.levels = G.gainExp(p, g.exp); g.learned = learnNewMoves(p, g.levels); }
+    if (g.exp) { g.levels = grantExp(p, g.exp); g.learned = learnNewMoves(p, g.levels); }
     g.evApplied = G.addEvs(p, g.evs);
     if (participants.has(p.uid)) {
       p.battles = (p.battles || 0) + 1; if (won) p.wins = (p.wins || 0) + 1;
@@ -1088,7 +1264,12 @@ async function finishBattle() {
   if (st.forfeit) coins = tier === 'practice' ? 0 : Math.floor(t.coins * 0.2);
   const amulet = party.some(p => participants.has(p.uid) && p.item === 'amuletcoin');
   if (amulet) coins *= 2;
-  save.coins += coins;
+  let capped = false;
+  if (tier === 'practice' && won) {
+    const pc = save.ledger.practiceCoins = save.ledger.practiceCoins?.date === key ? save.ledger.practiceCoins : { date: key, wins: 0 };
+    if (pc.wins >= G.PRACTICE_COIN_WINS) { coins = 0; capped = true; } else pc.wins++;
+  }
+  addCoins(coins);
   save.battles++; if (won) save.wins++;
   const pTeam = b.sides.p.team;
   const hpLeftPct = pTeam.reduce((a, m) => a + m.hp / m.maxhp, 0) / pTeam.length;
@@ -1121,7 +1302,7 @@ async function finishBattle() {
   const choice = await new Promise(resolve => {
     showModal(`<div class="eyebrow">${tier === 'practice' ? 'Practice' : 'Daily · ' + esc(t.name)}</div><h2 id="modalTitle">${won ? 'You won!' : st.forfeit ? 'You forfeited.' : 'You lost…'}</h2>
       <p>${won ? 'You defeated ' + esc(st.trainer.name) + ' in ' + turns + ' turns.' : 'Train up and try again' + (tier === 'practice' ? '!' : ' tomorrow!')}</p>
-      <div class="odds"><div class="odds-row"><span>Coins</span><b>+${coins}${amulet ? ' (Amulet Coin ×2)' : ''}</b></div>${tier !== 'practice' ? `<div class="odds-row"><span>Daily score</span><b>${fmt(score)} pts</b></div>` : ''}<div class="odds-row"><span>Knockouts</span><b>${bs.kos}</b></div></div>
+      <div class="odds"><div class="odds-row"><span>Coins</span><b>+${coins}${amulet ? ' (Amulet Coin ×2)' : ''}${capped ? ' (daily practice coin limit reached)' : ''}</b></div>${tier !== 'practice' ? `<div class="odds-row"><span>Daily score</span><b>${fmt(score)} pts</b></div>` : ''}<div class="odds-row"><span>Knockouts</span><b>${bs.kos}</b></div></div>
       <div class="result-list">${rows}</div>
       <div class="row-btns">${tier !== 'practice' && won ? `<button class="btn ghost" data-share="${tier}">Share result</button>` : ''}${tier === 'practice' ? '<button class="btn ghost" id="againPractice">Battle again</button>' : ''}<button class="btn primary" data-close autofocus>Continue</button></div>`, { wide: true, onClose: () => resolve('continue') });
     const again = $('#againPractice'); if (again) again.onclick = () => { modalOnClose = null; closeModal(true); resolve('again'); };
@@ -1136,9 +1317,8 @@ async function finishBattle() {
 }
 function shareText(tier) {
   const r = save.daily[tier]; if (!r) return '';
-  const hearts = r.hp >= 75 ? '💚💚💚' : r.hp >= 40 ? '💚💚🖤' : r.hp > 0 ? '💚🖤🖤' : '🖤🖤🖤';
-  const all = DAILY.map(k => save.daily[k]?.result === 'win' ? '🟩' : save.daily[k] ? '🟥' : '⬜').join('');
-  return `PokeDuel ${G.todayKey()} ${all}\n${G.DAILY_TIERS[tier].name}: won in ${r.turns} turns ${hearts}\nScore ${fmt(r.score)} · ${location.origin}`;
+  const all = DAILY.map(k => save.daily[k]?.result === 'win' ? 'W' : save.daily[k] ? 'L' : '-').join(' ');
+  return `PokeDuel ${G.todayKey()} [${all}]\n${G.DAILY_TIERS[tier].name}: won in ${r.turns} turns with ${r.hp}% HP left\nScore ${fmt(r.score)} · ${location.origin}`;
 }
 async function share(tier) {
   const text = shareText(tier);
@@ -1151,23 +1331,30 @@ function setupListeners() {
   document.addEventListener('click', e => {
     const t = e.target.closest('button, [data-go], label') || e.target;
     if (t.closest?.('[data-close]')) { closeModal(true); return; }
-    const goEl = e.target.closest('[data-go]'); if (goEl) { closeModal(true); go(goEl.dataset.go); return; }
+    const goEl = e.target.closest('[data-go]'); if (goEl) { e.preventDefault(); if (goEl.dataset.go === 'missions') { showMissions(); return; } closeModal(true); go(goEl.dataset.go); return; }
     const battleBtn = e.target.closest('[data-battle]'); if (battleBtn) { startBattle(battleBtn.dataset.battle); return; }
     const box = e.target.closest('[data-box]'); if (box) { openBox(box.dataset.box); return; }
     const shareBtn = e.target.closest('[data-share]'); if (shareBtn) { share(shareBtn.dataset.share); return; }
     const openMon = e.target.closest('[data-open-mon]'); if (openMon) { ui.sel = openMon.dataset.openMon; go('boxes'); return; }
     if (e.target.closest('#claimCheckin')) { claimCheckin(); return; }
     const cm = e.target.closest('[data-claim-mission]');
-    if (cm) { const m = save.missions.list[+cm.dataset.claimMission]; if (m && !m.claimed) { m.claimed = true; save.coins += m.reward; afterProgress(); renderHome(); toast('Mission complete! +' + m.reward + ' coins'); } return; }
-    if (e.target.closest('#missionBonus')) { if (!save.missions.bonus) { save.missions.bonus = true; save.inventory.expcandyl = (save.inventory.expcandyl || 0) + 1; afterProgress(); renderHome(); toast('Bonus: Exp. Candy L added to your Bag!'); } return; }
+    if (cm) { const m = save.missions.list[+cm.dataset.claimMission]; const v = save.dayStats.values[m?.stat] || 0; if (m && !m.claimed && v >= m.goal) { m.claimed = true; addCoins(m.reward); afterProgress(); renderHome(); showMissions(); toast('Mission complete! +' + m.reward + ' coins'); } return; }
+    if (e.target.closest('#missionBonus')) { if (!save.missions.bonus && save.missions.list.every(m => m.claimed)) { save.missions.bonus = true; save.inventory.expcandyl = (save.inventory.expcandyl || 0) + 1; afterProgress(); renderHome(); showMissions(); toast('Bonus: Exp. Candy L added to your Bag!'); } return; }
+    if (e.target.closest('#openCheckin')) { showCheckin(); return; }
+    if (e.target.closest('#howToPlay')) { showHowTo(); return; }
+    const feat = e.target.closest('[data-feature]'); if (feat) { ui.shopCat = feat.dataset.cat; ui.shopSel = feat.dataset.feature; ui.shopQty = 1; renderShop(); return; }
     const rank = e.target.closest('[data-rank]'); if (rank) { ui.rankTab = rank.dataset.rank; renderRanks(); return; }
   });
   $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('#modalClose').addEventListener('click', () => closeModal());
   // Starter
-  $('#generationBar').addEventListener('click', e => { const b = e.target.closest('[data-gen]'); if (b) { ui.starterGen = +b.dataset.gen; renderStarter(); } });
-  $('#onboardStarterGrid').addEventListener('click', e => { const b = e.target.closest('[data-pick-starter]'); if (b) { ui.starterSel = b.dataset.pickStarter; renderStarter(); } });
-  $('#confirmStarter').addEventListener('click', confirmStarter);
+  const setGen = g => { ui.starterName = $('#starterName')?.value; ui.starterGen = ((g - 1 + 9) % 9) + 1; ui.starterSel = G.speciesByNum(G.STARTERS_BY_GEN[ui.starterGen][1]); renderStarter(); };
+  $('#generationBar').addEventListener('click', e => { const b = e.target.closest('[data-gen]'); if (b) setGen(+b.dataset.gen); });
+  $('#genPrev').addEventListener('click', () => setGen(ui.starterGen - 1));
+  $('#genNext').addEventListener('click', () => setGen(ui.starterGen + 1));
+  $('#onboardStarterGrid').addEventListener('click', e => { const b = e.target.closest('[data-pick-starter]'); if (b) { ui.starterName = $('#starterName')?.value; ui.starterSel = b.dataset.pickStarter; renderStarter(); } });
+  $('#chosenSummary').addEventListener('click', e => { if (e.target.closest('#confirmStarter')) confirmStarter(); });
+  $('#chosenSummary').addEventListener('input', e => { if (e.target.id === 'starterName') ui.starterName = e.target.value; });
   // Boxes
   $('#screen-boxes').addEventListener('click', e => {
     const s = e.target.closest('[data-sel]'); if (s) { ui.sel = s.dataset.sel; renderBoxes(); return; }
@@ -1210,7 +1397,7 @@ function setupListeners() {
     const slot = e.target.closest('[data-showslot]');
     if (slot) { pickPokemon('Choose a Pokémon to showcase', null, p => { const i = +slot.dataset.showslot; const list = save.showcase.filter(u => u !== p.uid); list.splice(Math.min(i, list.length), 0, p.uid); save.showcase = list.slice(0, 3); persist(); renderProfile(); }); return; }
     if (e.target.closest('#shareCard')) {
-      const show = save.showcase.map(byUid).filter(Boolean).map(p => (p.shiny ? '✦' : '') + G.displayName(p) + ' Lv.' + p.level).join(' · ');
+      const show = save.showcase.map(byUid).filter(Boolean).map(p => (p.shiny ? 'Shiny ' : '') + G.displayName(p) + ' Lv.' + p.level).join(' · ');
       const text = `PokeDuel Trainer Card — ${trainerName()} (${rankName(G.trainerScore(save))})\nScore ${fmt(G.trainerScore(save))} · Dex ${save.ownedDex.length} · Shinies ${save.shinyDex.length} · Wins ${save.wins}${show ? '\nShowcase: ' + show : ''}`;
       navigator.clipboard?.writeText(text).then(() => toast('Trainer card copied!'), () => showModal(`<textarea readonly>${esc(text)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`));
     }
@@ -1246,14 +1433,23 @@ function setupListeners() {
   });
   // Keyboard
   document.addEventListener('keydown', e => {
-    if (e.target.matches('input, textarea, select')) return;
+    if (e.target.matches('input, textarea, select')) { if (activeScreen === 'starter' && e.key === 'Enter' && e.target.id === 'starterName') confirmStarter(); return; }
+    if (activeScreen === 'starter' && $('#modal').classList.contains('hidden')) {
+      const ids = G.STARTERS_BY_GEN[ui.starterGen].map(n => G.speciesByNum(n));
+      const i = ids.indexOf(ui.starterSel);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { ui.starterSel = ids[(i + (e.key === 'ArrowRight' ? 1 : 2)) % 3]; renderStarter(); e.preventDefault(); }
+      if (e.key.toLowerCase() === 'q') setGen(ui.starterGen - 1);
+      if (e.key.toLowerCase() === 'e') setGen(ui.starterGen + 1);
+      if (e.key === 'Enter') confirmStarter();
+      return;
+    }
     if (e.key === 'Escape') { if (!$('#modal').classList.contains('hidden')) { closeModal(); return; } if (activeScreen === 'battle' && battleState?.menu === 'fight') { battleState.menu = 'main'; renderCommands(); return; } if (!['home', 'battle', 'starter'].includes(activeScreen)) go('home'); return; }
     if (!$('#modal').classList.contains('hidden')) return;
     if (activeScreen === 'home') {
       if (e.key.toLowerCase() === 'b') go('boxes');
       if (e.key.toLowerCase() === 'p') startBattle('practice');
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const items = $$('#mainMenu .menu-item'); const i = items.indexOf(document.activeElement);
+        const items = $$('#mainMenu .qtile, #dailyCards [data-battle]'); const i = items.indexOf(document.activeElement);
         const n = i < 0 ? 0 : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
         items[n].focus(); e.preventDefault();
       }
@@ -1278,13 +1474,16 @@ async function loadData() {
 }
 // Optional artwork listed in assets/manifest.json (see ASSET_REQUESTS.md). Only
 // files named there are requested, so missing art never causes 404s.
-const assets = { backgrounds: {} };
+const assets = { backgrounds: {}, arenas: {}, tiers: {} };
 async function loadAssetManifest() {
   try {
     const r = await fetch('assets/manifest.json', { cache: 'no-cache' });
     if (!r.ok) return;
     const m = await r.json();
     assets.backgrounds = m.backgrounds || {};
+    assets.arenas = m.arenas || {};
+    assets.tiers = m.tiers || {};
+    for (const a of Object.values(assets.arenas)) if (a?.file) preload('assets/backgrounds/' + a.file);
     if (assets.backgrounds.home) document.body.style.setProperty('--home-bg', `url("assets/backgrounds/${assets.backgrounds.home}")`);
   } catch (e) { /* artwork is optional */ }
 }
@@ -1297,10 +1496,11 @@ async function boot() {
     return;
   }
   save = readSave();
+  runAudit(save);
   initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
   checkNewDay();
   if (save.settings.reducedEffects) document.body.classList.add('reduced-effects');
-  loadAssetManifest();
+  await loadAssetManifest();
   setupListeners();
   document.body.classList.remove('booting');
   const start = location.hash.replace('#/', '');

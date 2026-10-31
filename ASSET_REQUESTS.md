@@ -18,7 +18,18 @@ Please keep everything original (no screenshots or traced game art), with no Pok
 - **Palette:** deep blues and teals with warm window/lamp highlights (around `#1b2b55`, `#0f6c7c`, and amber `#f6c14a`). Slightly desaturated so white text stays readable.
 - **Transparency:** none.
 
-## 2–5. Battle backgrounds — `battle-easy`, `battle-medium`, `battle-hard`, `battle-practice`
+## Integrated
+
+- `battle-field.webp` (owner-supplied, 1672×941) is used for every battle tier. Easy and practice battles use daylight, medium uses a dusk grade and hard uses a night grade, all applied in CSS. Its platform centres are recorded in `assets/manifest.json`.
+
+## Optional extras
+
+The game already works without these.
+
+- Dedicated dusk and night versions of `battle-field` would look better than the CSS grade. Keep the same 1672×941 framing and **identical platform positions**: player platform centred at 31.6%/79.5% (52% wide), foe platform at 78.7%/60.5% (31% wide).
+- Any new arena needs its own `foe` and `player` platform coordinates in the manifest.
+
+## 2–5. Battle backgrounds — original request (kept for reference)
 
 - **Purpose:** the battle arena. The game draws two soft elliptical platforms, the Pokémon sprites and the HP panels on top of it.
 - **Size:** 1920 × 1080 px (16:9). JPG or WebP, under 350 KB each. The arena is cropped with `background-size: cover`, so keep important detail away from the outer 10%.

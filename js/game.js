@@ -4,6 +4,7 @@
 // DOM-free so it can be unit-tested in Node.
 
 import { NATURES, STATS, TYPES, calcStats, makeRng, hashString, toId, TYPE_BOOST_ITEMS } from './engine.js';
+import { signPokemon, verifyPokemon } from './security.js';
 
 const G = { dex: {}, moves: {}, learn: null, moveList: [], numToId: {} };
 export function setGameData({ dex, moves, learnsets }) {
@@ -13,6 +14,8 @@ export function setGameData({ dex, moves, learnsets }) {
 }
 export const gameData = G;
 export const speciesByNum = n => G.numToId[n];
+// Root of a species' evolution family (used to check a Pokémon can't change line).
+export function familyRoot(species) { let s = species, guard = 0; while (G.dex[s]?.prevo && G.dex[G.dex[s].prevo] && guard++ < 5) s = G.dex[s].prevo; return s; }
 
 // ---------- Dates / seeded daily content ----------
 export const todayKey = (d = new Date()) => [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
@@ -234,8 +237,10 @@ export function generatePokemon(species, level, opts = {}) {
     ivs, evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, hyper: {}, teraType, item: null,
     marks: mark ? [mark] : [], mark, size, moves: defaultMoves(species, level), learned: [], friendship: legendary ? 0 : 70,
     metAt: new Date().toISOString(), origin: opts.origin || 'box', battles: 0, wins: 0, fav: false,
+    line: familyRoot(species),
   };
-  return p;
+  p.exp0 = p.exp;
+  return signPokemon(p);
 }
 
 // ---------- Evolution ----------
@@ -548,6 +553,8 @@ export function defaultSave() {
     wins: 0, battles: 0, practiceCount: 0, ownedDex: [], seenDex: [], shinyDex: [], medals: {}, showcase: [],
     stats: { kos: 0, superEffective: 0, crits: 0, boxesOpened: 0, evolutions: 0, dailySweeps: 0, teraWins: 0, damageDealt: 0, statusMoves: 0, trainingItems: 0, teraUsed: 0, practiceWins: 0, dailyWins: 0 },
     dayStats: { date: '', values: {} }, history: [], dailyScores: {},
+    ledger: { start: 300, earned: 0, spent: 0, expGranted: 0, pokemonGranted: 0, practiceCoins: { date: '', wins: 0 } },
+    integrity: { status: 'ok', reasons: [] },
     settings: { animations: true, reducedEffects: false, battleSpeed: 1, showDamage: true },
     lastActive: '',
   };
@@ -603,7 +610,8 @@ export function migrateSave(raw) {
     if (raw.inventory) { inv.potion = num(raw.inventory.potion, 0); if (raw.inventory.candy) inv.expcandys = (inv.expcandys || 0) + num(raw.inventory.candy); if (raw.inventory.ball) inv.pokeball = num(raw.inventory.ball); }
     raw = { ...base, coins: num(raw.coins, 250), starterChosen: !!raw.starterChosen && box.length > 0, starterId: raw.starterId ?? null, box, party, inventory: inv,
       dailyDate: raw.dailyDate || base.dailyDate, daily: { ...base.daily, ...(raw.daily || {}) }, wins: num(raw.wins), battles: num(raw.battles), practiceCount: num(raw.practiceCount),
-      ownedDex: raw.ownedDex || [], settings: { ...base.settings, ...(raw.settings || {}) }, lastActive: raw.lastActive || '', migratedFrom: 1 };
+      ownedDex: raw.ownedDex || [], settings: { ...base.settings, ...(raw.settings || {}) }, lastActive: raw.lastActive || '', migratedFrom: 1,
+      ledger: { ...base.ledger, start: num(raw.coins, 250), pokemonGranted: box.length } };
   }
   if (raw.version !== 1 && raw.version !== SAVE_VERSION && raw.migratedFrom !== 1) return null;
   const s = { ...base, ...raw, version: SAVE_VERSION };
@@ -627,10 +635,61 @@ export function migrateSave(raw) {
   for (const k of ['ownedDex', 'seenDex', 'shinyDex']) s[k] = [...new Set((Array.isArray(raw[k]) ? raw[k] : []).map(Number).filter(n => n > 0 && n <= 1025))];
   for (const p of s.box) { const n = G.dex[p.species].num; if (!s.ownedDex.includes(n)) s.ownedDex.push(n); if (p.shiny && !s.shinyDex.includes(n)) s.shinyDex.push(n); }
   s.showcase = (Array.isArray(raw.showcase) ? raw.showcase : []).filter(u => uids.has(u)).slice(0, 3);
+  s.ledger = { ...base.ledger, ...(raw.ledger || {}) };
+  for (const k of ['start', 'earned', 'spent', 'expGranted', 'pokemonGranted']) s.ledger[k] = num(s.ledger[k]);
+  if (!raw.ledger) {
+    // Pre-protection save: adopt its current state as the baseline.
+    s.ledger = { ...base.ledger, start: s.coins, pokemonGranted: s.box.length };
+    s.box.forEach(adoptLegacyPokemon);
+    s.legacyAdopted = true;
+  }
+  s.integrity = raw.integrity && typeof raw.integrity === 'object' ? { status: raw.integrity.status || 'ok', reasons: Array.isArray(raw.integrity.reasons) ? raw.integrity.reasons.slice(0, 12).map(String) : [], since: raw.integrity.since } : { ...base.integrity };
   s.history = (Array.isArray(raw.history) ? raw.history : []).slice(-30);
   s.wins = num(raw.wins); s.battles = num(raw.battles); s.practiceCount = num(raw.practiceCount);
   s.trainerName = String(raw.trainerName || '').replace(/[<>]/g, '').slice(0, 16);
   s.avatar = Math.round(num(raw.avatar, 25, 1, 1025));
   s.starterChosen = !!raw.starterChosen && s.box.length > 0;
   return s;
+}
+
+// ---------- Integrity audit ----------
+// Generous plausibility checks. A failed check never deletes anything; the save
+// is just marked unranked. Caps are set well above what legitimate play earns.
+export const RELEASE_EPOCH = Date.parse('2026-10-28T00:00:00Z');
+export const DAILY_COIN_CAP = 3000;        // check-in + missions + daily battles (x2 Amulet Coin) + capped practice
+export const PRACTICE_COIN_WINS = 30;      // practice wins per day that still pay coins
+export const MEDAL_TOTAL = () => MEDALS.reduce((a, m) => a + m.reward, 0);
+export function levelForExp(rate, exp) { let l = 1; while (l < 100 && expForLevel(rate, l + 1) <= exp) l++; return l; }
+// Gives older (pre-protection) Pokémon a lineage and signature, keeping their current state.
+export function adoptLegacyPokemon(p) {
+  if (!p.line) p.line = familyRoot(p.species);
+  if (p.exp0 === undefined) p.exp0 = p.exp;
+  return signPokemon(p);
+}
+export function auditSave(s, now = Date.now()) {
+  const issues = [];
+  const L = s.ledger || {};
+  if (s.coins !== (L.start || 0) + (L.earned || 0) - (L.spent || 0)) issues.push('Coin balance does not match the coin ledger.');
+  const born = Math.max(Date.parse(s.createdAt) || now, RELEASE_EPOCH);
+  const days = Math.max(1, Math.floor((now - born) / 864e5) + 1);
+  if ((L.earned || 0) > MEDAL_TOTAL() + days * DAILY_COIN_CAP) issues.push('More coins were earned than the game can pay out in ' + days + ' day(s).');
+  if ((L.start || 0) > 20000) issues.push('Starting coin balance is implausible.');
+  const seen = new Set();
+  let expGained = 0, shinies = 0;
+  for (const p of s.box || []) {
+    const n = G.dex[p.species]?.name || p.species;
+    if (seen.has(p.uid)) issues.push(n + ' is a duplicate of another Pokémon.');
+    seen.add(p.uid);
+    if (!verifyPokemon(p)) issues.push(n + ' failed its signature check (edited IVs, nature, shiny or origin).');
+    else if (familyRoot(p.species) !== p.line) issues.push(n + ' does not belong to its original evolution line.');
+    if (expForLevel(G.dex[p.species]?.gr || 2, p.level) > p.exp) issues.push(n + "'s level is higher than its Exp. Points allow.");
+    expGained += Math.max(0, p.exp - (p.exp0 || 0));
+    if (p.shiny) shinies++;
+  }
+  if (expGained > (L.expGranted || 0) + 1) issues.push('Pokémon have more Exp. Points than were ever earned.');
+  if ((s.box || []).length > (L.pokemonGranted || 0)) issues.push('More Pokémon than were ever obtained.');
+  if (shinies > 3 + (L.pokemonGranted || 0) / 10) issues.push('Implausibly many shiny Pokémon for the number obtained.');
+  if ((s.wins || 0) > (s.battles || 0)) issues.push('More wins than battles.');
+  for (const v of Object.values(s.dailyScores || {})) if (v > 1400) { issues.push('A daily score is above the maximum possible.'); break; }
+  return [...new Set(issues)];
 }

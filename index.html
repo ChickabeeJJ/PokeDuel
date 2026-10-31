@@ -3,30 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#14203d">
+<meta name="theme-color" content="#0d1434">
 <title>PokeDuel — The Daily Battle</title>
 <meta name="description" content="Build your team, train your Pokémon, and take on three daily battles in PokeDuel.">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://raw.githubusercontent.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body class="booting">
 <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
   <div class="boot-card">
-    <div class="logo-mark" aria-hidden="true"><span></span></div>
+    <img src="assets/logo.svg" alt="">
     <h1 class="logo-type">PokeDuel</h1>
-    <p id="bootMessage">Loading Pokémon data…</p>
+    <p id="bootMessage" class="muted">Loading Pokémon data…</p>
     <div class="boot-bar"><i id="bootBar"></i></div>
     <button id="bootRetry" class="btn primary" hidden>Try again</button>
   </div>
 </div>
 
 <header class="hud" id="hud" hidden>
+  <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
   <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
     <img id="hudAvatar" alt="" width="40" height="40">
-    <span><b id="hudName">Trainer</b><small id="hudRank">Rank —</small></span>
+    <span><b id="hudName">Trainer</b><small id="hudRank">Rank</small></span>
   </button>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
@@ -37,71 +39,44 @@
     <button data-go="leaderboard" class="hud-link">Ranks</button>
   </nav>
   <div class="hud-wallet">
-    <span class="pill score" title="Trainer score"><i class="ico-star" aria-hidden="true"></i><b id="hudScore">0</b> TP</span>
-    <span class="pill coins" title="Coins"><i class="ico-coin" aria-hidden="true"></i><b id="coins">0</b></span>
+    <span class="pill" title="Trainer points"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg><b id="hudScore">0</b>TP</span>
+    <span class="pill" title="Coins"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg><b id="coins">0</b></span>
   </div>
 </header>
 
 <main id="app">
-  <!-- First-join starter selection -->
+  <!-- First-join starter stage -->
   <section id="screen-starter" class="screen screen-starter" data-screen="starter">
-    <div class="starter-head">
-      <div class="eyebrow">First-time setup</div>
-      <h1>Choose your first partner</h1>
-      <p>Your partner starts at level 10 with its own nature, IVs, ability and Tera Type. Shiny partners are possible.</p>
+    <div class="st-head"><img src="assets/logo.svg" alt=""><div class="st-title"><div class="eyebrow">First-time setup</div><h1>Choose your partner</h1><p>Every partner rolls its own nature, IVs, ability and Tera Type. One in 256 is shiny.</p></div></div>
+    <div class="gen-bar">
+      <button class="icon-btn" id="genPrev" aria-label="Previous generation"><svg class="ic"><use href="assets/icons.svg#i-chev-l"/></svg></button>
+      <div class="gen-tabs" id="generationBar" role="tablist" aria-label="Generations"></div>
+      <button class="icon-btn" id="genNext" aria-label="Next generation"><svg class="ic"><use href="assets/icons.svg#i-chev-r"/></svg></button>
     </div>
-    <div class="gen-tabs" id="generationBar" role="tablist" aria-label="Generations"></div>
-    <div class="starter-stage">
-      <div class="starter-grid" id="onboardStarterGrid"></div>
-      <aside class="starter-summary" id="chosenSummary" aria-live="polite"></aside>
-    </div>
-    <div class="starter-footer">
-      <label class="field"><span>Trainer name</span><input id="starterName" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
-      <button class="btn primary big" id="confirmStarter" disabled>Begin your journey</button>
-    </div>
+    <div class="st-stage" id="onboardStarterGrid"></div>
+    <div class="st-info panel" id="chosenSummary" aria-live="polite"></div>
   </section>
 
-  <!-- Home: party + main menu, like the in-game X menu -->
+  <!-- Home: one focused daily column, in the spirit of daily web puzzle games -->
   <section id="screen-home" class="screen screen-home" data-screen="home">
-    <aside class="party-panel" aria-label="Party">
-      <div class="panel-title">Party <small id="partyCount"></small></div>
-      <ol class="party-list" id="homeParty"></ol>
-      <button class="party-foot" data-go="boxes"><span>Open Boxes</span><kbd>B</kbd></button>
-    </aside>
-    <div class="home-center">
-      <div class="today-strip" id="todayStrip"></div>
-      <section class="daily-three" aria-labelledby="dailyHeading">
-        <div class="section-title"><h2 id="dailyHeading">The Daily Three</h2><span id="dailyProgress" class="tag"></span></div>
-        <div class="daily-cards" id="dailyCards"></div>
-      </section>
-      <div class="home-grid">
-        <section class="card missions" aria-labelledby="missionHeading"><div class="section-title"><h2 id="missionHeading">Daily missions</h2><span class="tag" id="missionCount"></span></div><ul id="missionList" class="mission-list"></ul></section>
-        <section class="card outbreak" id="outbreakCard" aria-label="Mass outbreak"></section>
-      </div>
+    <div class="daily-wrap">
+      <header class="daily-head" id="dailyHead"></header>
+      <section class="daily-track" id="dailyCards" aria-label="Today's three battles"></section>
+      <section class="team-strip" id="teamStrip" aria-label="Your team"></section>
+      <nav class="quick-grid" id="mainMenu" aria-label="More"></nav>
     </div>
-    <nav class="main-menu" aria-label="Main menu" id="mainMenu">
-      <div class="panel-title">Main Menu</div>
-      <button class="menu-item" data-go="practice"><i class="mi mi-battle"></i>Practice Battle<kbd>P</kbd></button>
-      <button class="menu-item" data-go="boxes"><i class="mi mi-box"></i>Boxes</button>
-      <button class="menu-item" data-go="shop"><i class="mi mi-shop"></i>Shop</button>
-      <button class="menu-item" data-go="bag"><i class="mi mi-bag"></i>Bag</button>
-      <button class="menu-item" data-go="dex"><i class="mi mi-dex"></i>Pokédex</button>
-      <button class="menu-item" data-go="leaderboard"><i class="mi mi-rank"></i>Leaderboards</button>
-      <button class="menu-item" data-go="profile"><i class="mi mi-card"></i>Trainer Card</button>
-      <button class="menu-item" data-go="medals"><i class="mi mi-medal"></i>Medals</button>
-    </nav>
   </section>
 
-  <!-- Boxes: party + 30-slot grid + summary -->
+  <!-- Boxes -->
   <section id="screen-boxes" class="screen screen-boxes" data-screen="boxes">
-    <div class="tabbar teal-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Party and Boxes</span><span class="muted" id="boxTotals"></span></div>
+    <div class="tabbar teal-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Party and Boxes</span><span class="muted" id="boxTotals"></span></div>
     <div class="boxes-layout">
       <aside class="box-party"><div class="pill-head">Current Party</div><ol id="boxParty" class="box-party-list"></ol></aside>
       <div class="box-main">
-        <div class="box-nav"><button id="boxPrev" aria-label="Previous box">L</button><span id="boxName">Box 1</span><button id="boxNext" aria-label="Next box">R</button></div>
-        <div class="box-grid" id="boxGrid" role="grid" aria-label="Box contents"></div>
+        <div class="box-nav"><button class="icon-btn light" id="boxPrev" aria-label="Previous box"><svg class="ic"><use href="assets/icons.svg#i-chev-l"/></svg></button><span id="boxName">Box 1</span><button class="icon-btn light" id="boxNext" aria-label="Next box"><svg class="ic"><use href="assets/icons.svg#i-chev-r"/></svg></button></div>
+        <div class="box-grid-wrap"><div class="box-grid" id="boxGrid" role="grid" aria-label="Box contents"></div></div>
         <div class="box-tools">
-          <label class="search"><input id="boxSearch" placeholder="Search name, type, mark…" autocomplete="off"></label>
+          <label class="search"><input id="boxSearch" placeholder="Search name, type, mark, nature" autocomplete="off" aria-label="Search boxes"></label>
           <select id="boxSort" aria-label="Sort"><option value="recent">Newest</option><option value="dex">Dex number</option><option value="level">Level</option><option value="iv">IV total</option><option value="shiny">Shiny first</option></select>
         </div>
       </div>
@@ -109,24 +84,20 @@
     </div>
   </section>
 
-  <!-- Shop / Bag share the orange bag layout -->
+  <!-- Shop / Bag -->
   <section id="screen-shop" class="screen screen-bag" data-screen="shop">
-    <div class="bag-band top"><span class="band-title"><i class="mi mi-shop"></i>Shop</span><span class="band-wallet"><i class="ico-coin"></i><b id="shopCoins">0</b></span></div>
-    <div class="bag-cats" id="shopCats" role="tablist"></div>
-    <div class="bag-layout"><ul class="bag-list" id="shopList" role="listbox" aria-label="Items for sale"></ul><aside class="bag-detail" id="shopDetail"></aside></div>
-    <div class="bag-band bottom"><span>All purchases use in-game coins. No real-money purchases.</span><button data-go="home" class="hint"><kbd>Esc</kbd>Back</button></div>
+    <div class="bag-band"><span class="band-title"><svg class="ic"><use href="assets/icons.svg#i-shop"/></svg>Shop</span><span class="band-sub">In-game coins only</span><span class="band-wallet"><svg class="ic"><use href="assets/icons.svg#i-coin"/></svg><b id="shopCoins">0</b></span></div>
+    <div class="bag-layout"><nav class="bag-cats" id="shopCats" role="tablist" aria-label="Shop categories"></nav><div class="bag-main" id="shopMain"></div><aside class="bag-detail" id="shopDetail" aria-live="polite"></aside></div>
   </section>
   <section id="screen-bag" class="screen screen-bag" data-screen="bag">
-    <div class="bag-band top"><span class="band-title"><i class="mi mi-bag"></i>Bag</span><span class="band-wallet"><i class="ico-coin"></i><b id="bagCoins">0</b></span></div>
-    <div class="bag-cats" id="bagCats" role="tablist"></div>
-    <div class="bag-layout"><ul class="bag-list" id="bagList" role="listbox" aria-label="Your items"></ul><aside class="bag-detail" id="bagDetail"></aside></div>
-    <div class="bag-band bottom"><span>Held items are not used up between battles.</span><button data-go="home" class="hint"><kbd>Esc</kbd>Back</button></div>
+    <div class="bag-band"><span class="band-title"><svg class="ic"><use href="assets/icons.svg#i-bag"/></svg>Bag</span><span class="band-sub">Held items aren't used up between battles</span><span class="band-wallet"><svg class="ic"><use href="assets/icons.svg#i-coin"/></svg><b id="bagCoins">0</b></span></div>
+    <div class="bag-layout"><nav class="bag-cats" id="bagCats" role="tablist" aria-label="Bag pockets"></nav><div class="bag-main" id="bagMain"></div><aside class="bag-detail" id="bagDetail" aria-live="polite"></aside></div>
   </section>
 
   <section id="screen-dex" class="screen screen-dex" data-screen="dex">
-    <div class="tabbar red-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Pokédex</span><span id="dexTotals" class="muted"></span></div>
+    <div class="tabbar red-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Pokédex</span><span id="dexTotals" class="muted"></span></div>
     <div class="dex-tools">
-      <input id="dexQuery" placeholder="Search by name, number or type…" autocomplete="off">
+      <input id="dexQuery" placeholder="Search by name, number or type" autocomplete="off" aria-label="Search the Pokédex">
       <select id="dexFilter" aria-label="Filter"><option value="all">All</option><option value="owned">Owned</option><option value="missing">Not owned</option><option value="shiny">Shiny owned</option></select>
       <select id="dexGen" aria-label="Generation"><option value="0">All gens</option></select>
     </div>
@@ -135,39 +106,39 @@
   </section>
 
   <section id="screen-leaderboard" class="screen screen-ranks" data-screen="leaderboard">
-    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Leaderboards</span></div>
+    <div class="tabbar violet-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Leaderboards</span></div>
     <div class="rank-tabs" id="rankTabs" role="tablist"></div>
     <div id="rankBody" class="rank-body"></div>
   </section>
 
   <section id="screen-profile" class="screen screen-profile" data-screen="profile">
-    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Trainer Card</span></div>
+    <div class="tabbar violet-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Trainer Card</span></div>
     <div class="profile-layout">
       <div class="trainer-card" id="trainerCard"></div>
       <div class="profile-side">
         <section class="card"><div class="section-title"><h2>Account</h2></div>
           <p class="muted" id="authStatus" aria-live="polite">Not signed in. Progress stays on this device.</p>
-          <p class="account-name"><b id="profileName">Guest</b></p>
+          <p style="margin-top:6px"><b id="profileName">Guest</b></p>
           <div class="row-btns"><button id="googleSignIn" class="btn primary" type="button">Continue with Google</button><button id="googleSignOut" class="btn ghost" type="button" hidden>Sign out</button></div>
         </section>
-        <section class="card"><div class="section-title"><h2>Save data</h2></div>
-          <p class="muted">Export a backup file, or import one to restore progress on any device. Importing replaces this browser's save (a backup copy is kept).</p>
-          <div class="row-btns"><button id="exportSave" class="btn primary">Export save file</button><button id="copySave" class="btn ghost">Copy save code</button></div>
-          <div class="row-btns"><label class="btn ghost file-btn">Import file<input type="file" id="importFile" accept="application/json,.json" hidden></label><button id="pasteSave" class="btn ghost">Paste save code</button></div>
+        <section class="card"><div class="section-title"><h2>Protected save transfer</h2></div>
+          <p class="muted">Exports are encrypted with a password you choose and sealed against editing. You need the same password to import.</p>
+          <div class="row-btns"><button id="exportSave" class="btn primary"><svg class="ic"><use href="assets/icons.svg#i-download"/></svg>Export save file</button><button id="copySave" class="btn ghost"><svg class="ic"><use href="assets/icons.svg#i-copy"/></svg>Copy save code</button></div>
+          <div class="row-btns"><label class="btn ghost file-btn"><svg class="ic"><use href="assets/icons.svg#i-upload"/></svg>Import file<input type="file" id="importFile" accept=".pokeduel,application/json,.json" hidden></label><button id="pasteSave" class="btn ghost">Paste save code</button></div>
         </section>
         <section class="card"><div class="section-title"><h2>Options</h2></div>
           <label class="setting-row"><span>Battle animations</span><input type="checkbox" id="animationsToggle"></label>
           <label class="setting-row"><span>Reduce motion and effects</span><input type="checkbox" id="effectsToggle"></label>
           <label class="setting-row"><span>Show damage previews on moves</span><input type="checkbox" id="damageToggle"></label>
           <label class="setting-row"><span>Text speed</span><select id="speedSelect"><option value="0.6">Slow</option><option value="1">Normal</option><option value="1.8">Fast</option></select></label>
-          <button id="resetSave" class="btn danger">Reset local save</button>
+          <div class="row-btns"><button id="resetSave" class="btn danger">Reset local save</button></div>
         </section>
       </div>
     </div>
   </section>
 
   <section id="screen-medals" class="screen screen-profile" data-screen="medals">
-    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Medals</span><span class="muted" id="medalCount"></span></div>
+    <div class="tabbar violet-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Medals</span><span class="muted" id="medalCount"></span></div>
     <div class="medal-grid" id="medalGrid"></div>
   </section>
 
@@ -181,8 +152,8 @@
       </div>
       <div class="foe-info status-card" id="foeCard"></div>
       <div class="foe-team" id="foeTeam" aria-label="Opponent team"></div>
-      <div class="platform foe-platform"><img id="enemySprite" class="battle-sprite foe" alt=""></div>
-      <div class="platform player-platform"><img id="playerSprite" class="battle-sprite mine" alt=""></div>
+      <div class="slot foe-slot" id="foeSlot"><img id="enemySprite" class="battle-sprite foe" alt=""></div>
+      <div class="slot player-slot" id="playerSlot"><img id="playerSprite" class="battle-sprite mine" alt=""></div>
       <div class="player-info status-card" id="playerCard"></div>
       <div class="battle-fx" id="battleFlash" aria-hidden="true"></div>
     </div>
@@ -194,11 +165,11 @@
 </main>
 
 <footer class="site-foot" id="siteFoot" hidden>
-  <span>PokeDuel is an unofficial, non-commercial fan project and is not affiliated with Nintendo, The Pokémon Company or Game Freak.</span>
+  <span>PokeDuel is an unofficial, non-commercial fan project, not affiliated with Nintendo, The Pokémon Company or Game Freak.</span>
   <span><a href="/privacy">Privacy</a> · Data: <a href="https://pokeapi.co/" target="_blank" rel="noreferrer">PokéAPI</a> · Mechanics: <a href="https://github.com/smogon/pokemon-showdown" target="_blank" rel="noreferrer">Pokémon Showdown</a></span>
 </footer>
 
-<div class="modal-backdrop hidden" id="modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="Close">✕</button><div id="modalContent"></div></div></div>
+<div class="modal-backdrop hidden" id="modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="icon-btn modal-close" id="modalClose" aria-label="Close"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><div id="modalContent"></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="app.js"></script>
 </body>
