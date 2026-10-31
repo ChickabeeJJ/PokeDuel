@@ -541,7 +541,6 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .cmd{position:relative;display:flex;align-items:center;gap:12px;min-height:66px;padding:10px 22px;border:0;overflow:hidden;color:#ffffff;font:800 1.55rem/1 var(--display);font-style:italic;text-transform:uppercase;text-shadow:0 2px 0 rgba(0,0,0,.3);text-align:left;
   background:var(--cg);clip-path:polygon(14px 0,100% 0,calc(100% - 14px) 100%,0 100%);transition:transform .12s,filter .12s}
 .cmd .ic{width:30px;height:30px}
-.cmd::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(-55deg,rgba(255,255,255,.1) 0 3px,transparent 3px 14px)}
 .cmd:hover:not(:disabled),.cmd:focus-visible{outline:0;transform:translateY(-2px);filter:brightness(1.15)}
 .cmd:focus-visible{box-shadow:inset 0 0 0 3px var(--lime);background:linear-gradient(to bottom right,transparent calc(50% - 2.25px),var(--lime) calc(50% - 2.25px),var(--lime) calc(50% + 2.25px),transparent calc(50% + 2.25px)) left/14px 100% no-repeat,linear-gradient(to bottom right,transparent calc(50% - 2.25px),var(--lime) calc(50% - 2.25px),var(--lime) calc(50% + 2.25px),transparent calc(50% + 2.25px)) right/14px 100% no-repeat,var(--cg)}
 .cmd.fight{--cg:linear-gradient(180deg,#ff6a4a,#e0262e)}
@@ -818,11 +817,20 @@ body.in-battle main{padding-bottom:18px}
 body.in-battle #parade{display:none}
 .wanderer{position:absolute;left:0;will-change:transform}
 .wanderer img{display:block;image-rendering:pixelated;filter:drop-shadow(0 3px 2px rgba(0,0,0,.45))}
-.wanderer.walk img{animation:trot .34s ease-in-out infinite alternate}
-.wanderer.fly img{animation:hover 1.6s ease-in-out infinite alternate}
-@keyframes trot{from{translate:0 0}to{translate:0 -5px}}
-@keyframes hover{from{translate:0 0}to{translate:0 -14px}}
 #siteFoot{position:relative;z-index:1}
+
+/* Outlined boxes draw their outline along cut corners too (--ol colour, --ow half-width). */
+.battle-log{--ol:rgba(255,255,255,.75);--ow:1.5px;background:linear-gradient(to bottom left,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) top right/18px 18px no-repeat,linear-gradient(to bottom left,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) bottom left/18px 18px no-repeat,linear-gradient(110deg,rgba(15,16,19,.95),rgba(38,41,48,.95))}
+.mcard{--ol:var(--edge);--ow:.75px;background:linear-gradient(to bottom right,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) top left/14px 14px no-repeat,linear-gradient(to bottom right,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) bottom right/14px 14px no-repeat,linear-gradient(170deg,#4a4f59,#2a2d33 60%,#1d1f23)}
+.mcard.ready{--ol:var(--hot);--ow:2.25px}
+.mbonus{--ol:var(--edge);--ow:.75px;background:linear-gradient(to bottom right,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) top left/12px 12px no-repeat,linear-gradient(to bottom right,transparent calc(50% - var(--ow)),var(--ol) calc(50% - var(--ow)),var(--ol) calc(50% + var(--ow)),transparent calc(50% + var(--ow))) bottom right/12px 12px no-repeat,linear-gradient(100deg,#3b3f47,#24262b)}
+.mbonus.ready{--ol:var(--hot);--ow:2.25px}
+
+.tc-avatar-btn{position:relative;flex:none;padding:0;border:0;background:none;cursor:pointer}
+.tc-avatar-btn span{position:absolute;left:50%;bottom:4px;translate:-50% 0;padding:2px 10px;background:rgba(10,11,13,.85);color:#fff;font:800 .72rem/1.3 var(--display);letter-spacing:.06em;text-transform:uppercase;opacity:0;transition:opacity .15s}
+.tc-avatar-btn:hover span,.tc-avatar-btn:focus-visible span{opacity:1}
+.tc-avatar-btn:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+.avatar-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
 
 /* ---------- Responsive ---------- */
 @media (max-width:1280px){

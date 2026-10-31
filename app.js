@@ -999,9 +999,9 @@ function renderProfile() {
   const score = G.trainerScore(save);
   const show = save.showcase.map(byUid).filter(Boolean);
   const integ = save.integrity || { status: 'ok' };
-  $('#trainerCard').innerHTML = `<div class="tc-head">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2>
+  $('#trainerCard').innerHTML = `<div class="tc-head"><button class="tc-avatar-btn" id="pickAvatar" aria-label="Change profile picture" title="Change profile picture">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<span>Change</span></button><div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2>
     <div class="tc-verify ${ranked() ? 'ok' : 'bad'}">${ic(ranked() ? 'shield' : 'warn')}${ranked() ? 'Verified save · ranked' : 'Unranked save'}</div>
-    <div class="row-btns" style="margin-top:8px"><button class="btn small ghost" id="renameTrainer">Edit name</button></div></div></div>
+    <div class="row-btns" style="margin-top:8px"><button class="btn small ghost" id="renameTrainer">Edit name</button><button class="btn small ghost" id="pickAvatar2">Change picture</button></div></div></div>
     ${ranked() ? '' : `<div class="integrity" style="margin-top:14px">${ic('warn')}<div><b>This save failed integrity checks, so it won't appear on leaderboards.</b> You can keep playing normally.<ul>${(integ.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul></div></div>`}
     <div class="tc-stats"><div><small>Trainer score</small><b>${fmt(score)}</b></div><div><small>Wins</small><b>${fmt(save.wins)}</b></div><div><small>Battles</small><b>${fmt(save.battles)}</b></div><div><small>Pokédex</small><b>${save.ownedDex.length}</b></div><div><small>Shiny species</small><b>${save.shinyDex.length}</b></div><div><small>Best streak</small><b>${save.checkin.best || 0} days</b></div><div><small>Daily sweeps</small><b>${save.stats.dailySweeps}</b></div><div><small>Medals</small><b>${Object.keys(save.medals).length}/${G.MEDALS.length}</b></div></div>
     <div class="section-title"><h2>Showcase</h2><span class="muted">Shown on leaderboards</span></div>
@@ -1073,6 +1073,28 @@ function renderJourney() {
     const top = topLevel(), lvl = s.kind === 'route' ? J.buildStepTrainer(s).level : Math.max(...s.leader.team.map(t => t[1]));
     if (top < lvl - 8) confirmBox('Tough battle ahead', `${esc(stepLabel(s))}'s team goes up to Lv. ${lvl}, and your strongest Pokémon is Lv. ${top}. You can still try. Losing costs nothing.`, 'Battle anyway', () => startBattle('journey', s));
     else startBattle('journey', s);
+  });
+}
+
+// Any Pokémon can be the profile picture, owned or not.
+function showAvatarPicker() {
+  const all = [...new Map(Object.values(D()).filter(d => d.num > 0 && d.num <= 1025).sort((a, b) => a.num - b.num).map(d => [d.num, d])).values()];
+  showModal(`<h2 id="modalTitle">Profile picture</h2><p class="muted">Pick any Pokémon. It appears on your Trainer Card, the top bar and leaderboards.</p>
+    <label class="field"><span>Search</span><input id="avatarSearch" type="search" placeholder="Name or Pokédex number" autocomplete="off"></label>
+    <div class="pick-grid avatar-grid" id="avatarGrid" style="margin-top:12px"></div>`, { wide: true });
+  const draw = () => {
+    const q = $('#avatarSearch').value.trim().toLowerCase().replace(/^#/, '');
+    const list = q ? all.filter(d => d.name.toLowerCase().includes(q) || String(d.num) === q.replace(/^0+/, '')) : all;
+    $('#avatarGrid').innerHTML = list.slice(0, 180).map(d => `<button data-avatar="${d.num}" class="${d.num === save.avatar ? 'on' : ''}">${iconOf(d.num, false)}<span>${esc(d.name)}</span><small>#${String(d.num).padStart(4, '0')}</small></button>`).join('')
+      + (list.length > 180 ? `<p class="muted" style="grid-column:1/-1">Showing 180 of ${list.length}. Search to narrow it down.</p>` : '') || '<div class="empty">No Pokémon match that search.</div>';
+  };
+  draw();
+  $('#avatarSearch').addEventListener('input', draw);
+  $('#avatarGrid').addEventListener('click', e => {
+    const b = e.target.closest('[data-avatar]'); if (!b) return;
+    save.avatar = +b.dataset.avatar; persist(); updateHud(); closeModal(true);
+    if (activeScreen === 'profile') renderProfile();
+    toast(D()[G.gameData.numToId[save.avatar]].name + ' is your new profile picture.');
   });
 }
 
@@ -1579,6 +1601,7 @@ function setupListeners() {
   $('#dexResults').addEventListener('click', e => { const c = e.target.closest('[data-dex]'); if (c) showDexEntry(c.dataset.dex); });
   // Profile
   $('#screen-profile').addEventListener('click', e => {
+    if (e.target.closest('#pickAvatar, #pickAvatar2')) { showAvatarPicker(); return; }
     if (e.target.closest('#renameTrainer')) {
       showModal(`<h2 id="modalTitle">Trainer name</h2><p class="muted">Shown on leaderboards. Keep it friendly — no personal information.</p><input id="nameInput" maxlength="16" value="${esc(save.trainerName)}" autofocus><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="nameOk">Save</button></div>`);
       $('#nameOk').onclick = () => { save.trainerName = $('#nameInput').value.trim().replace(/[<>]/g, '').slice(0, 16) || 'Trainer'; closeModal(true); persist(); renderProfile(); };
@@ -1707,11 +1730,15 @@ function spawnWanderer() {
   el.className = 'wanderer ' + (flies ? 'fly' : 'walk');
   el.style.bottom = (flies ? 34 + Math.random() * 40 : 0) + 'px';
   const im = new Image();
-  im.alt = ''; im.decoding = 'async';
+  im.alt = ''; im.decoding = 'async'; im.crossOrigin = 'anonymous';
   im.onerror = () => el.remove();
   im.onload = () => {
     if (!el.isConnected) return;
-    im.style.width = Math.round(im.naturalWidth * (im.naturalHeight > 90 ? 90 / im.naturalHeight : 1)) + 'px';
+    // Scale by real species height (Joltik small, Wailord big), measured on the visible pixels.
+    const b = spriteBox(im), targetH = Math.max(22, Math.min(110, 46 * Math.sqrt(d.ht || 1)));
+    const k = targetH / b.h;
+    im.style.width = Math.round(im.naturalWidth * k) + 'px';
+    im.style.marginBottom = -Math.round((im.naturalHeight - b.y - b.h) * k) + 'px';
     const w = lane.clientWidth, span = w + 240;
     const speed = 50 + d.bs[5] * 0.7; // px per second, from base Speed
     parade.live++;
