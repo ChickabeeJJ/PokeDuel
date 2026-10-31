@@ -2,160 +2,203 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b1525">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14203d">
 <title>PokeDuel — The Daily Battle</title>
 <meta name="description" content="Build your team, train your Pokémon, and take on three daily battles in PokeDuel.">
 <link rel="preconnect" href="https://raw.githubusercontent.com">
-<link rel="preconnect" href="https://pokeapi.co">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-<header class="topbar">
-  <a class="brand" href="#" aria-label="PokeDuel home"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a>
-  <nav><button class="navlink active" data-page="home">HOME</button><button class="navlink" data-page="team">MY TEAM</button><button class="navlink" data-page="shop">SHOP</button><button class="navlink" data-page="dex">DEX</button></nav>
-  <div class="wallet"><span>◈ <b id="coins">250</b></span><button class="profile" id="profileBtn" title="Profile">♂</button></div>
+<body class="booting">
+<div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
+  <div class="boot-card">
+    <div class="logo-mark" aria-hidden="true"><span></span></div>
+    <h1 class="logo-type">PokeDuel</h1>
+    <p id="bootMessage">Loading Pokémon data…</p>
+    <div class="boot-bar"><i id="bootBar"></i></div>
+    <button id="bootRetry" class="btn primary" hidden>Try again</button>
+  </div>
+</div>
+
+<header class="hud" id="hud" hidden>
+  <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
+    <img id="hudAvatar" alt="" width="40" height="40">
+    <span><b id="hudName">Trainer</b><small id="hudRank">Rank —</small></span>
+  </button>
+  <nav class="hud-nav" aria-label="Main">
+    <button data-go="home" class="hud-link">Home</button>
+    <button data-go="boxes" class="hud-link">Boxes</button>
+    <button data-go="shop" class="hud-link">Shop</button>
+    <button data-go="bag" class="hud-link">Bag</button>
+    <button data-go="dex" class="hud-link">Pokédex</button>
+    <button data-go="leaderboard" class="hud-link">Ranks</button>
+  </nav>
+  <div class="hud-wallet">
+    <span class="pill score" title="Trainer score"><i class="ico-star" aria-hidden="true"></i><b id="hudScore">0</b> TP</span>
+    <span class="pill coins" title="Coins"><i class="ico-coin" aria-hidden="true"></i><b id="coins">0</b></span>
+  </div>
 </header>
-<main>
-<section id="page-starter" class="page onboarding-page">
- <header class="onboard-header">
-  <a class="brand" href="#" aria-label="PokeDuel home"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a>
-  <span class="onboard-step">FIRST-TIME SETUP</span>
- </header>
- <div class="onboard-content">
-  <section class="onboard-intro">
-   <div class="eyebrow">START YOUR ADVENTURE</div>
-   <h1>Choose your first Pokémon</h1>
-   <p>Your first partner starts at level 10. Choose one of the nine generations below.</p>
-   <p>27 starter Pokémon · 9 generations</p>
+
+<main id="app">
+  <!-- First-join starter selection -->
+  <section id="screen-starter" class="screen screen-starter" data-screen="starter">
+    <div class="starter-head">
+      <div class="eyebrow">First-time setup</div>
+      <h1>Choose your first partner</h1>
+      <p>Your partner starts at level 10 with its own nature, IVs, ability and Tera Type. Shiny partners are possible.</p>
+    </div>
+    <div class="gen-tabs" id="generationBar" role="tablist" aria-label="Generations"></div>
+    <div class="starter-stage">
+      <div class="starter-grid" id="onboardStarterGrid"></div>
+      <aside class="starter-summary" id="chosenSummary" aria-live="polite"></aside>
+    </div>
+    <div class="starter-footer">
+      <label class="field"><span>Trainer name</span><input id="starterName" maxlength="16" placeholder="Your name" autocomplete="nickname"></label>
+      <button class="btn primary big" id="confirmStarter" disabled>Begin your journey</button>
+    </div>
   </section>
-  <section class="starter-explorer">
-   <div class="generation-bar" id="generationBar">
-    <button class="generation-tab active" data-gen="1">Gen <b>I</b><small>Kanto</small></button>
-    <button class="generation-tab" data-gen="2">Gen <b>II</b><small>Johto</small></button>
-    <button class="generation-tab" data-gen="3">Gen <b>III</b><small>Hoenn</small></button>
-    <button class="generation-tab" data-gen="4">Gen <b>IV</b><small>Sinnoh</small></button>
-    <button class="generation-tab" data-gen="5">Gen <b>V</b><small>Unova</small></button>
-    <button class="generation-tab" data-gen="6">Gen <b>VI</b><small>Kalos</small></button>
-    <button class="generation-tab" data-gen="7">Gen <b>VII</b><small>Alola</small></button>
-    <button class="generation-tab" data-gen="8">Gen <b>VIII</b><small>Galar</small></button>
-    <button class="generation-tab" data-gen="9">Gen <b>IX</b><small>Paldea</small></button>
-   </div>
-   <div class="starter-carousel-head">
-    <div><span class="eyebrow" id="generationRegion">Generation 01 / Kanto</span><h2 id="generationTitle">Choose a starter</h2></div>
-    <span class="starter-count" id="starterCount">01 / 03</span>
-   </div>
-   <div class="onboard-starter-grid" id="onboardStarterGrid">
-    <div class="starter-loading">Loading starter Pokémon…</div>
-   </div>
-   <div class="starter-selection-footer">
-    <div class="chosen-summary" id="chosenSummary"><span class="chosen-empty">—</span><span><b>Your partner</b><small>Select a Pokémon above</small></span></div>
-    <button class="btn primary confirm-starter" id="confirmStarter" disabled>Confirm starter</button>
-   </div>
+
+  <!-- Home: party + main menu, like the in-game X menu -->
+  <section id="screen-home" class="screen screen-home" data-screen="home">
+    <aside class="party-panel" aria-label="Party">
+      <div class="panel-title">Party <small id="partyCount"></small></div>
+      <ol class="party-list" id="homeParty"></ol>
+      <button class="party-foot" data-go="boxes"><span>Open Boxes</span><kbd>B</kbd></button>
+    </aside>
+    <div class="home-center">
+      <div class="today-strip" id="todayStrip"></div>
+      <section class="daily-three" aria-labelledby="dailyHeading">
+        <div class="section-title"><h2 id="dailyHeading">The Daily Three</h2><span id="dailyProgress" class="tag"></span></div>
+        <div class="daily-cards" id="dailyCards"></div>
+      </section>
+      <div class="home-grid">
+        <section class="card missions" aria-labelledby="missionHeading"><div class="section-title"><h2 id="missionHeading">Daily missions</h2><span class="tag" id="missionCount"></span></div><ul id="missionList" class="mission-list"></ul></section>
+        <section class="card outbreak" id="outbreakCard" aria-label="Mass outbreak"></section>
+      </div>
+    </div>
+    <nav class="main-menu" aria-label="Main menu" id="mainMenu">
+      <div class="panel-title">Main Menu</div>
+      <button class="menu-item" data-go="practice"><i class="mi mi-battle"></i>Practice Battle<kbd>P</kbd></button>
+      <button class="menu-item" data-go="boxes"><i class="mi mi-box"></i>Boxes</button>
+      <button class="menu-item" data-go="shop"><i class="mi mi-shop"></i>Shop</button>
+      <button class="menu-item" data-go="bag"><i class="mi mi-bag"></i>Bag</button>
+      <button class="menu-item" data-go="dex"><i class="mi mi-dex"></i>Pokédex</button>
+      <button class="menu-item" data-go="leaderboard"><i class="mi mi-rank"></i>Leaderboards</button>
+      <button class="menu-item" data-go="profile"><i class="mi mi-card"></i>Trainer Card</button>
+      <button class="menu-item" data-go="medals"><i class="mi mi-medal"></i>Medals</button>
+    </nav>
   </section>
- </div>
-</section>
 
-<section id="page-home" class="page active">
-  <div class="hero">
-    <div class="hero-copy"><div class="eyebrow"><i></i> DAILY CHALLENGE <span id="todayLabel"></span></div>
-    <h1>YOUR NEXT<br><em>RIVAL</em> AWAITS.</h1>
-    <p>Three battles. One team. Every day is a new test of your strategy.</p>
-    <div class="hero-actions"><button class="btn primary" data-page="team">BUILD YOUR TEAM <span>↗</span></button><button class="btn ghost" id="quickBattle">QUICK PRACTICE</button></div>
-    <div class="hero-stats"><div><b>1,025+</b><small>SPECIES TO DISCOVER</small></div><div><b>03</b><small>DAILY BATTLES</small></div><div><b>∞</b><small>PRACTICE RUNS</small></div></div></div>
-    <div class="hero-art"><img id="heroPokemon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png" alt="Charizard" onerror="this.style.display='none'"><span class="art-label">NO. 006 / CHARIZARD</span></div>
-  </div>
-  <section class="section-heading"><div><div class="eyebrow">TODAY'S GAUNTLET</div><h2>THE DAILY THREE</h2></div><span class="muted" id="dailyProgress">0 / 3 CLEARED</span></section>
-  <div class="battle-grid">
-    <article class="battle-card easy"><div class="card-top"><span class="difficulty">01 / EASY</span><span class="status" id="status-easy">AVAILABLE</span></div><div class="arena-sigil">Ⅰ</div><h3>WARM-UP</h3><p>A friendly opening bout. Get your bearings and collect your first reward.</p><div class="card-bottom"><span>REWARD <b>+80 XP · 40 ◈</b></span><button class="btn small" data-battle="easy">BATTLE →</button></div></article>
-    <article class="battle-card medium"><div class="card-top"><span class="difficulty">02 / MEDIUM</span><span class="status" id="status-medium">AVAILABLE</span></div><div class="arena-sigil">Ⅱ</div><h3>RIVAL TEST</h3><p>A tougher opponent with smarter coverage. Bring a balanced team.</p><div class="card-bottom"><span>REWARD <b>+160 XP · 75 ◈</b></span><button class="btn small" data-battle="medium">BATTLE →</button></div></article>
-    <article class="battle-card hard"><div class="card-top"><span class="difficulty">03 / HARD</span><span class="status" id="status-hard">AVAILABLE</span></div><div class="arena-sigil">Ⅲ</div><h3>ACE CHALLENGE</h3><p>The day's final trial. Expect strong moves and no free turns.</p><div class="card-bottom"><span>REWARD <b>+300 XP · 150 ◈</b></span><button class="btn small" data-battle="hard">BATTLE →</button></div></article>
-  </div>
-  <div class="lower-grid"><article class="panel continue-panel"><div class="panel-head"><span>YOUR JOURNEY</span><span class="muted">TRAINER RECORD</span></div><div class="journey-row"><img id="starterThumb" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png" alt=""><div><h3 id="homeStarter">Pikachu</h3><p id="homeLevel">Lv. 10 · Starter Pokémon</p><div class="xp-track"><i id="homeXp"></i></div></div><button class="text-btn" data-page="team">VIEW TEAM ↗</button></div></article>
-  <article class="panel practice-panel"><div class="panel-head"><span>OFF THE CLOCK</span><span class="pill">NO LIMIT</span></div><h3>Practice arena</h3><p>Train at your own pace. Lower XP and coin rewards, no daily limit.</p><button class="btn ghost full" id="practiceBtn">ENTER PRACTICE ARENA →</button></article></div>
-</section>
+  <!-- Boxes: party + 30-slot grid + summary -->
+  <section id="screen-boxes" class="screen screen-boxes" data-screen="boxes">
+    <div class="tabbar teal-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Party and Boxes</span><span class="muted" id="boxTotals"></span></div>
+    <div class="boxes-layout">
+      <aside class="box-party"><div class="pill-head">Current Party</div><ol id="boxParty" class="box-party-list"></ol></aside>
+      <div class="box-main">
+        <div class="box-nav"><button id="boxPrev" aria-label="Previous box">L</button><span id="boxName">Box 1</span><button id="boxNext" aria-label="Next box">R</button></div>
+        <div class="box-grid" id="boxGrid" role="grid" aria-label="Box contents"></div>
+        <div class="box-tools">
+          <label class="search"><input id="boxSearch" placeholder="Search name, type, mark…" autocomplete="off"></label>
+          <select id="boxSort" aria-label="Sort"><option value="recent">Newest</option><option value="dex">Dex number</option><option value="level">Level</option><option value="iv">IV total</option><option value="shiny">Shiny first</option></select>
+        </div>
+      </div>
+      <aside class="summary" id="summaryPanel" aria-live="polite"></aside>
+    </div>
+  </section>
 
-<section id="page-team" class="page">
-  <div class="page-title"><div class="eyebrow">YOUR COLLECTION</div><h1>MY <em>TEAM</em></h1><p>Manage your roster, train your partners, and prepare for the daily gauntlet.</p></div>
-  <div id="rosterSection" class="panel"><div class="panel-head"><span>ACTIVE ROSTER</span><span class="muted" id="teamCount">0 / 6 PARTY</span></div><div class="roster-grid" id="rosterGrid"></div><div class="roster-note">Tip: type matchups, status effects, and move coverage matter more than raw level.</div></div>
-</section>
+  <!-- Shop / Bag share the orange bag layout -->
+  <section id="screen-shop" class="screen screen-bag" data-screen="shop">
+    <div class="bag-band top"><span class="band-title"><i class="mi mi-shop"></i>Shop</span><span class="band-wallet"><i class="ico-coin"></i><b id="shopCoins">0</b></span></div>
+    <div class="bag-cats" id="shopCats" role="tablist"></div>
+    <div class="bag-layout"><ul class="bag-list" id="shopList" role="listbox" aria-label="Items for sale"></ul><aside class="bag-detail" id="shopDetail"></aside></div>
+    <div class="bag-band bottom"><span>All purchases use in-game coins. No real-money purchases.</span><button data-go="home" class="hint"><kbd>Esc</kbd>Back</button></div>
+  </section>
+  <section id="screen-bag" class="screen screen-bag" data-screen="bag">
+    <div class="bag-band top"><span class="band-title"><i class="mi mi-bag"></i>Bag</span><span class="band-wallet"><i class="ico-coin"></i><b id="bagCoins">0</b></span></div>
+    <div class="bag-cats" id="bagCats" role="tablist"></div>
+    <div class="bag-layout"><ul class="bag-list" id="bagList" role="listbox" aria-label="Your items"></ul><aside class="bag-detail" id="bagDetail"></aside></div>
+    <div class="bag-band bottom"><span>Held items are not used up between battles.</span><button data-go="home" class="hint"><kbd>Esc</kbd>Back</button></div>
+  </section>
 
-<section id="page-shop" class="page">
- <div class="page-title"><div class="eyebrow">SHOP</div><h1>Shop</h1><p>Spend coins earned from battles on items and Pokémon boxes.</p></div>
- <div class="shop-balance"><strong>Coins:</strong> <span id="shopCoins">250</span> ◈</div>
- <div class="shop-tabs">
-  <button class="tab active" data-shop="items">Items</button>
-  <button class="tab" data-shop="packs">Pokémon boxes</button>
- </div>
- <div id="shop-items" class="shop-grid">
-  <article class="shop-card">
-   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png" alt="Potion" loading="lazy">
-   <div class="eyebrow">Recovery item</div><h3>Potion</h3>
-   <p>Restores 25% of your active Pokémon's maximum HP during battle.</p>
-   <div class="shop-buy"><b>35 ◈</b><button class="btn small" data-buy="potion">Buy</button></div>
-  </article>
-  <article class="shop-card">
-   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/rare-candy.png" alt="XP Candy" loading="lazy">
-   <div class="eyebrow">Training item</div><h3>XP Candy S</h3>
-   <p>Gives your selected Pokémon 50 experience points.</p>
-   <div class="shop-buy"><b>60 ◈</b><button class="btn small" data-buy="candy">Buy</button></div>
-  </article>
-  <article class="shop-card">
-   <img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png" alt="Poké Ball" loading="lazy">
-   <div class="eyebrow">Trainer gear</div><h3>Poké Ball</h3>
-   <p>A collection item. Capture mechanics are not implemented yet.</p>
-   <div class="shop-buy"><b>25 ◈</b><button class="btn small" data-buy="ball">Buy</button></div>
-  </article>
- </div>
- <div id="shop-packs" class="shop-grid hidden">
-  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png" alt="" loading="lazy"><div class="eyebrow">27 starter Pokémon</div><h3>Starter Box</h3><p>A random first-partner Pokémon from any of the nine generations.</p><div class="shop-buy"><b>180 ◈</b><button class="btn small" data-pack="starter">Open box</button></div></article>
-  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png" alt="" loading="lazy"><div class="eyebrow">National Pokédex</div><h3>Basic Box</h3><p>A random Pokémon from the National Pokédex range used by this prototype.</p><div class="shop-buy"><b>120 ◈</b><button class="btn small" data-pack="basic">Open box</button></div></article>
-  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/149.png" alt="" loading="lazy"><div class="eyebrow">Curated pool</div><h3>Rare Box</h3><p>A random Pokémon from a selected evolved and high-stat pool.</p><div class="shop-buy"><b>350 ◈</b><button class="btn small" data-pack="rare">Open box</button></div></article>
-  <article class="shop-card"><img class="shop-item-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1007.png" alt="" loading="lazy"><div class="eyebrow">Premium pool</div><h3>Master Box</h3><p>Has a chance to give a legendary or mythical Pokémon.</p><div class="shop-buy"><b>700 ◈</b><button class="btn small" data-pack="master">Open box</button></div></article>
-  <article class="shop-card"><h3>Kanto Box</h3><p>Pokédex entries 1–151.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g1">Open box</button></div></article>
-  <article class="shop-card"><h3>Johto Box</h3><p>Pokédex entries 152–251.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g2">Open box</button></div></article>
-  <article class="shop-card"><h3>Hoenn Box</h3><p>Pokédex entries 252–386.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g3">Open box</button></div></article>
-  <article class="shop-card"><h3>Sinnoh Box</h3><p>Pokédex entries 387–493.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g4">Open box</button></div></article>
-  <article class="shop-card"><h3>Unova Box</h3><p>Pokédex entries 494–649.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g5">Open box</button></div></article>
-  <article class="shop-card"><h3>Kalos Box</h3><p>Pokédex entries 650–721.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g6">Open box</button></div></article>
-  <article class="shop-card"><h3>Alola Box</h3><p>Pokédex entries 722–809.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g7">Open box</button></div></article>
-  <article class="shop-card"><h3>Galar Box</h3><p>Pokédex entries 810–905.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g8">Open box</button></div></article>
-  <article class="shop-card"><h3>Paldea Box</h3><p>Pokédex entries 906–1025.</p><div class="shop-buy"><b>150 ◈</b><button class="btn small" data-pack="g9">Open box</button></div></article>
- </div>
- <p class="fine-print">All purchases use in-game coins. No real-money purchases are available.</p>
-</section>
+  <section id="screen-dex" class="screen screen-dex" data-screen="dex">
+    <div class="tabbar red-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Pokédex</span><span id="dexTotals" class="muted"></span></div>
+    <div class="dex-tools">
+      <input id="dexQuery" placeholder="Search by name, number or type…" autocomplete="off">
+      <select id="dexFilter" aria-label="Filter"><option value="all">All</option><option value="owned">Owned</option><option value="missing">Not owned</option><option value="shiny">Shiny owned</option></select>
+      <select id="dexGen" aria-label="Generation"><option value="0">All gens</option></select>
+    </div>
+    <div id="dexResults" class="dex-grid"></div>
+    <div class="load-more"><button class="btn ghost" id="loadMore">Show more</button></div>
+  </section>
 
-<section id="page-dex" class="page">
- <div class="page-title"><div class="eyebrow">FIELD GUIDE</div><h1>THE <em>DEX</em></h1><p>Search Pokémon species and inspect their official artwork.</p></div>
- <div class="dex-search"><input id="dexQuery" placeholder="Search by name or Pokédex number…" autocomplete="off"><button class="btn primary" id="dexSearch">SEARCH</button></div>
- <div id="dexResults" class="dex-grid"></div><div class="load-more"><button class="btn ghost" id="loadMore">LOAD MORE SPECIES ↓</button></div>
-</section>
+  <section id="screen-leaderboard" class="screen screen-ranks" data-screen="leaderboard">
+    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Leaderboards</span></div>
+    <div class="rank-tabs" id="rankTabs" role="tablist"></div>
+    <div id="rankBody" class="rank-body"></div>
+  </section>
 
-<section id="page-battle" class="page">
- <div class="battle-screen">
-  <div class="battle-top"><button class="text-btn" id="leaveBattle">← FORFEIT</button><span class="eyebrow" id="battleLabel">DAILY BATTLE / EASY</span><span class="muted" id="battleTurn">TURN 01</span></div>
-  <div class="battlefield" id="battlefield">
-   
-   <div class="enemy-status status-box"><div class="status-name"><b id="enemyName">RIVAL'S POKÉMON</b><span id="enemyLevel">Lv. 8</span></div><div class="hpbar"><i id="enemyHpBar"></i></div><small><span id="enemyHpText">100/100</span> HP</small></div>
-   <img id="enemySprite" class="battle-sprite enemy-sprite" alt="Opponent">
-   <div class="player-status status-box"><div class="status-name"><b id="playerName">YOUR POKÉMON</b><span id="playerLevel">Lv. 10</span></div><div class="hpbar"><i id="playerHpBar"></i></div><small><span id="playerHpText">100/100</span> HP</small><div class="xp-mini"><i id="battleXpBar"></i></div></div>
-   <img id="playerSprite" class="battle-sprite player-sprite" alt="Your Pokémon">
-   <div id="battleFlash" class="battle-flash"></div>
-  </div>
-  <div class="battle-console"><div id="battleLog" class="battle-log" aria-live="polite">A challenger approaches!</div><div class="battle-controls" id="battleControls"><button class="move-btn" data-move="0"><span>01</span><b>—</b><small>—</small></button><button class="move-btn" data-move="1"><span>02</span><b>—</b><small>—</small></button><button class="move-btn" data-move="2"><span>03</span><b>—</b><small>—</small></button><button class="move-btn" data-move="3"><span>04</span><b>—</b><small>—</small></button><button class="move-btn bag-btn" id="bagBtn"><span>＋</span><b>BAG</b><small id="potionCount">POTION × 0</small></button><button class="move-btn switch-btn" id="switchBtn"><span>⇄</span><b>SWITCH</b><small>PARTY</small></button></div></div>
- </div>
-</section>
+  <section id="screen-profile" class="screen screen-profile" data-screen="profile">
+    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Trainer Card</span></div>
+    <div class="profile-layout">
+      <div class="trainer-card" id="trainerCard"></div>
+      <div class="profile-side">
+        <section class="card"><div class="section-title"><h2>Account</h2></div>
+          <p class="muted" id="authStatus" aria-live="polite">Not signed in. Progress stays on this device.</p>
+          <p class="account-name"><b id="profileName">Guest</b></p>
+          <div class="row-btns"><button id="googleSignIn" class="btn primary" type="button">Continue with Google</button><button id="googleSignOut" class="btn ghost" type="button" hidden>Sign out</button></div>
+        </section>
+        <section class="card"><div class="section-title"><h2>Save data</h2></div>
+          <p class="muted">Export a backup file, or import one to restore progress on any device. Importing replaces this browser's save (a backup copy is kept).</p>
+          <div class="row-btns"><button id="exportSave" class="btn primary">Export save file</button><button id="copySave" class="btn ghost">Copy save code</button></div>
+          <div class="row-btns"><label class="btn ghost file-btn">Import file<input type="file" id="importFile" accept="application/json,.json" hidden></label><button id="pasteSave" class="btn ghost">Paste save code</button></div>
+        </section>
+        <section class="card"><div class="section-title"><h2>Options</h2></div>
+          <label class="setting-row"><span>Battle animations</span><input type="checkbox" id="animationsToggle"></label>
+          <label class="setting-row"><span>Reduce motion and effects</span><input type="checkbox" id="effectsToggle"></label>
+          <label class="setting-row"><span>Show damage previews on moves</span><input type="checkbox" id="damageToggle"></label>
+          <label class="setting-row"><span>Text speed</span><select id="speedSelect"><option value="0.6">Slow</option><option value="1">Normal</option><option value="1.8">Fast</option></select></label>
+          <button id="resetSave" class="btn danger">Reset local save</button>
+        </section>
+      </div>
+    </div>
+  </section>
 
-<section id="page-profile" class="page"><div class="page-title"><div class="eyebrow">TRAINER CARD</div><h1>YOUR <em>RECORD</em></h1></div><div class="panel profile-panel"><div class="profile-emblem">PD</div><div><h2 id="profileName">ROOKIE TRAINER</h2><p id="profileStats">Battles won: 0 · Species caught: 0</p><p class="muted" id="authStatus" aria-live="polite">Not signed in. Progress stays on this device.</p><div class="auth-actions"><button id="googleSignIn" class="btn primary" type="button">CONTINUE WITH GOOGLE</button><button id="googleSignOut" class="btn ghost" type="button" hidden>SIGN OUT</button></div></div></div><div class="panel"><div class="panel-head"><span>SETTINGS</span></div><label class="setting-row"><span>Battle animations</span><input type="checkbox" id="animationsToggle" checked></label><label class="setting-row"><span>Reduce screen effects</span><input type="checkbox" id="effectsToggle"></label><button id="resetSave" class="btn danger">RESET LOCAL SAVE</button></div></section>
+  <section id="screen-medals" class="screen screen-profile" data-screen="medals">
+    <div class="tabbar violet-tabs"><button class="close-x" data-go="home" aria-label="Back to home">✕</button><span class="tab-on">Medals</span><span class="muted" id="medalCount"></span></div>
+    <div class="medal-grid" id="medalGrid"></div>
+  </section>
 
-<section id="page-privacy" class="page">
- <div class="page-title"><div class="eyebrow">THE BORING BUT IMPORTANT PART</div><h1>PRIVACY <em>POLICY</em></h1><p>Last updated: 28 October 2026</p></div>
- <article class="panel legal-copy"><h2>1. About this prototype</h2><p>PokeDuel is a fan-made, non-commercial Pokémon battle game prototype. It is not affiliated with, endorsed by, or connected to Nintendo, The Pokémon Company, Game Freak, or any official Pokémon product.</p><h2>2. Information we store</h2><p>When signed out, your team, coins, items, and progress are stored in this browser's local storage. When you sign in with Google, PokeDuel uses Firebase Authentication for sign-in and stores your game save plus your Google display name, email address, and profile-photo URL in a private Firestore document associated with your Firebase user ID. The app is designed to let each account access only its own save. Signing out does not erase this browser's local copy. Clearing browser site data may erase the local copy; cloud data remains until it is deleted under the project's account-data process.</p><h2>3. Third-party services</h2><p>The game may request species and sprite data from PokéAPI and its public sprite repository. Those services may receive standard connection information, such as your IP address, when your browser requests assets. Their own privacy terms apply. Battle backgrounds in this prototype are original CSS-generated scenery; external images may be added only where the source and usage rights permit.</p><h2>4. Google sign-in</h2><p>Google sign-in is provided by Firebase Authentication. Game progress and account display metadata are stored in Firebase Cloud Firestore. This prototype does not expose public profiles or chat. A self-service cloud-account deletion flow is not yet available; before a public launch, the operator must provide a clear way to request deletion and review the applicable privacy requirements.</p><h2>5. Children and accounts</h2><p>Do not submit sensitive personal information. No user account, chat, or public profile service is active in this prototype.</p><h2>6. Changes and contact</h2><p>This notice may change as the project develops. No dedicated support email has been configured for this prototype.</p><p class="fine-print">This starter policy is informational and is not legal advice. Review it and replace placeholders with actual service, operator, and contact details before public launch.</p></article>
-</section>
+  <!-- Battle -->
+  <section id="screen-battle" class="screen screen-battle" data-screen="battle">
+    <div class="arena" id="battlefield">
+      <div class="arena-top">
+        <span class="battle-label" id="battleLabel">Battle</span>
+        <span class="field-chips" id="fieldChips"></span>
+        <span class="turn-chip" id="battleTurn">Turn 1</span>
+      </div>
+      <div class="foe-info status-card" id="foeCard"></div>
+      <div class="foe-team" id="foeTeam" aria-label="Opponent team"></div>
+      <div class="platform foe-platform"><img id="enemySprite" class="battle-sprite foe" alt=""></div>
+      <div class="platform player-platform"><img id="playerSprite" class="battle-sprite mine" alt=""></div>
+      <div class="player-info status-card" id="playerCard"></div>
+      <div class="battle-fx" id="battleFlash" aria-hidden="true"></div>
+    </div>
+    <div class="battle-bottom">
+      <div class="battle-log" id="battleLog" aria-live="polite"></div>
+      <div class="battle-cmd" id="battleControls"></div>
+    </div>
+  </section>
 </main>
-<footer><a class="brand mini-brand" href="#"><span class="brand-mark">PD</span><span>POKEDUEL<small>UNOFFICIAL FAN PROJECT</small></span></a><div class="footer-links"><a href="/privacy">PRIVACY POLICY</a><a href="https://pokeapi.co/" target="_blank" rel="noreferrer">POKÉAPI</a><span>© FAN-MADE PROJECT</span></div></footer>
 
-<div class="modal-backdrop hidden" id="modal"><div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="Close">×</button><div id="modalContent"></div></div></div>
+<footer class="site-foot" id="siteFoot" hidden>
+  <span>PokeDuel is an unofficial, non-commercial fan project and is not affiliated with Nintendo, The Pokémon Company or Game Freak.</span>
+  <span><a href="/privacy">Privacy</a> · Data: <a href="https://pokeapi.co/" target="_blank" rel="noreferrer">PokéAPI</a> · Mechanics: <a href="https://github.com/smogon/pokemon-showdown" target="_blank" rel="noreferrer">Pokémon Showdown</a></span>
+</footer>
+
+<div class="modal-backdrop hidden" id="modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="Close">✕</button><div id="modalContent"></div></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="app.js"></script>
 </body>

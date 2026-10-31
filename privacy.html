@@ -2,24 +2,33 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b1525">
+<meta name="theme-color" content="#14203d">
 <title>Privacy Policy — PokeDuel</title>
-<meta name="description" content="How the PokeDuel prototype handles local save data and third-party game assets.">
+<meta name="description" content="How PokeDuel handles save data, accounts, leaderboards and third-party assets.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>.legal{max-width:820px;margin:0 auto;display:grid;gap:14px}.legal h2{font-size:1.15rem;margin-top:6px}.legal p,.legal li{color:#dfe6f7;line-height:1.6}.legal ul{margin:0;padding-left:20px}</style>
 </head>
 <body>
-<header class="topbar"><a class="brand" href="/"><span class="brand-mark">PD</span><span>POKEDUEL<small>THE DAILY BATTLE</small></span></a><a class="btn ghost" href="/">← BACK TO GAME</a></header>
+<header class="hud"><a class="btn ghost" href="/">← Back to game</a></header>
 <main>
-<div class="page-title"><div class="eyebrow">THE BORING BUT IMPORTANT PART</div><h1>PRIVACY <em>POLICY</em></h1><p>Last updated: 28 October 2026</p></div>
-<article class="panel legal-copy">
-<h2>1. About this prototype</h2><p>PokeDuel is an unofficial fan-made Pokémon battle simulator prototype. It is not affiliated with, endorsed by, or connected to Nintendo, The Pokémon Company, Game Freak, or any official Pokémon product.</p>
-<h2>2. Information stored</h2><p>When signed out, team data, coins, items, and progress are stored in the current browser's local storage. When you sign in with Google, Firebase Authentication processes the sign-in, and PokeDuel stores the game save plus your Google display name, email address, and profile-photo URL in a Firestore document associated with your Firebase user ID. The app is intended to restrict each user to their own save. Signing out does not erase the local copy. Clearing browser site data may remove that local copy, while cloud data remains until deleted through the project's account-data process.</p>
-<h2>3. Third-party services</h2><p>The game requests Pokémon species and sprite information from PokéAPI and its publicly available sprite repository. Those providers may receive ordinary connection information, including your IP address, when your browser requests data or images. Their own terms and privacy notices apply. The current battle backgrounds are CSS-generated; third-party artwork should only be added when the relevant usage rights permit it.</p>
-<h2>4. Google sign-in and accounts</h2><p>Google sign-in is provided by Firebase Authentication. Game progress and account display metadata are stored in Firebase Cloud Firestore. This prototype has no public profiles or chat. A self-service account deletion flow is not yet available; before public launch, the operator must provide a clear process for requesting deletion and review applicable privacy requirements.</p>
-<h2>5. Children and sensitive information</h2><p>Do not submit sensitive personal information. This prototype has no active account service, public profile system, or chat feature.</p>
-<h2>6. Policy updates and contact</h2><p>This notice may be revised as the project changes. A dedicated support contact has not yet been configured.</p>
-<p class="fine-print">This starter notice is provided for product development and is not legal advice. Before a public launch, replace the missing operator/contact details, verify all actual services, and review any applicable legal requirements.</p>
+<article class="legal card">
+<div class="eyebrow">The important part</div>
+<h1 style="font-size:2rem;font-weight:800">Privacy policy</h1>
+<p class="muted">Last updated: 31 October 2026</p>
+<h2>1. About PokeDuel</h2><p>PokeDuel is an unofficial, non-commercial fan-made Pokémon battle game. It is not affiliated with, endorsed by, or connected to Nintendo, The Pokémon Company, Game Freak, or any official Pokémon product. There are no real-money purchases.</p>
+<h2>2. Information stored on your device</h2><p>Your team, coins, items and progress are stored in this browser's local storage. A backup copy may also be kept there when you import, reset or upgrade a save. Clearing site data removes these copies. Save files or save codes that you export stay wherever you choose to keep them.</p>
+<h2>3. Google sign-in and cloud saves</h2><p>If you sign in with Google, Firebase Authentication processes the sign-in. PokeDuel stores your game save, your Google display name, email address and profile-photo URL in a Firestore document linked to your Firebase user ID. Each account is restricted to its own save document.</p>
+<h2>4. Leaderboards</h2><p>When you are signed in, PokeDuel publishes a leaderboard entry that other signed-in players can see. It contains:</p>
+<ul><li>your chosen <b>trainer name</b> (not your Google name or email);</li><li>the Pokémon species you picked as an avatar;</li><li>your Trainer Score, wins, Pokédex count, shiny count, best check-in streak and recent daily scores;</li><li>up to three showcased Pokémon (species, level, shiny and mark).</li></ul><p>Please don't use personal information as your trainer name.</p>
+<h2>5. Third-party services</h2><p>When your browser loads data or images, these providers may receive ordinary connection information, such as your IP address. Their own terms and privacy notices apply.</p>
+<ul><li>Pokémon sprites, artwork and item icons come from the public PokéAPI sprite repository, hosted on GitHub.</li><li>Pokédex text comes from PokéAPI.</li><li>The Barlow font comes from Google Fonts.</li><li>The sign-in and save libraries come from Google's Firebase CDN.</li></ul>
+<h2>6. Account deletion</h2><p>Self-service deletion of cloud saves and leaderboard entries is not available yet. Before a public launch, the operator must provide a clear way to request deletion.</p>
+<h2>7. Children and sensitive information</h2><p>Don't enter sensitive personal information anywhere in the game. PokeDuel has no chat or messaging.</p>
+<h2>8. Changes and contact</h2><p>This notice may change as the project develops. A dedicated support contact has not been set up yet.</p>
+<p class="muted">This notice is provided for product development and is not legal advice. Before a public launch, add the operator's contact details, verify every service listed and review the applicable legal requirements.</p>
 </article>
 </main>
-<footer><a class="brand mini-brand" href="/"><span class="brand-mark">PD</span><span>POKEDUEL<small>UNOFFICIAL FAN PROJECT</small></span></a><div class="footer-links"><a href="/">BACK TO GAME</a><a href="https://pokeapi.co/" target="_blank" rel="noreferrer">POKÉAPI</a><span>UNOFFICIAL FAN PROJECT</span></div></footer>
 </body></html>

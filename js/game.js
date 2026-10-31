@@ -547,7 +547,7 @@ export function defaultSave() {
     checkin: { last: '', streak: 0, best: 0 }, missions: { date: '', list: [], bonus: false },
     wins: 0, battles: 0, practiceCount: 0, ownedDex: [], seenDex: [], shinyDex: [], medals: {}, showcase: [],
     stats: { kos: 0, superEffective: 0, crits: 0, boxesOpened: 0, evolutions: 0, dailySweeps: 0, teraWins: 0, damageDealt: 0, statusMoves: 0, trainingItems: 0, teraUsed: 0, practiceWins: 0, dailyWins: 0 },
-    dayStats: { date: '', values: {} }, history: [],
+    dayStats: { date: '', values: {} }, history: [], dailyScores: {},
     settings: { animations: true, reducedEffects: false, battleSpeed: 1, showDamage: true },
     lastActive: '',
   };

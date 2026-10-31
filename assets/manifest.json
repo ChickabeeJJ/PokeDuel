@@ -1,0 +1,10 @@
+{
+  "_comment": "Optional artwork. Put approved files in assets/backgrounds/ and set the filename here (e.g. \"home\": \"home.jpg\"). Leave null to use the built-in gradient. See ASSET_REQUESTS.md.",
+  "backgrounds": {
+    "home": null,
+    "battle-easy": null,
+    "battle-medium": null,
+    "battle-hard": null,
+    "battle-practice": null
+  }
+}

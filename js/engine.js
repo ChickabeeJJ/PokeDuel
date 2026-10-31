@@ -111,7 +111,10 @@ const MOVE_HANDLED = new Set(('acrobatics assurance avalanche revenge boltbeak f
   'stoneaxe ceaselessedge thousandwaves anchorshot spiritshackle saltcure direclaw triattack alluringvoice burningjealousy eeriespell weatherball terrainpulse hiddenpower judgment ' +
   'multiattack technoblast revelationdance brickbreak psychicfangs ragingbull freezedry flyingpress thousandarrows hurricane thunder blizzard growth photongeyser struggle sandsearstorm ' +
   'wildboltstorm bleakwindstorm highjumpkick jumpkick supercellslam axekick mindblown steelbeam grassyglide poltergeist fellstinger sparklingaria wish healingwish lunardance shedtail ' +
-  'chillyreception batonpass lockon mindreader encore disable taunt torment attract gastroacid focuspunch smackdown worryseed simplebeam entrainment throatchop autotomize').split(' '));
+  'chillyreception batonpass lockon mindreader encore disable taunt torment attract gastroacid focuspunch smackdown worryseed simplebeam entrainment throatchop autotomize ' +
+  // Correct in singles: these need an ally and fail, or are handled by generic data.
+  'leechseed magnetrise miracleeye foresight odorsleuth splash celebrate octolock shellsidearm helpinghand afteryou allyswitch spotlight ' +
+  'falseswipe holdback dreameater synchronoise').split(' '));
 export function moveSupport(id) {
   const m = D.moves[id];
   if (!m) return 'unknown';
@@ -597,6 +600,9 @@ function useMove(b, user, id, baseMove, action) {
   if (['followme', 'ragepowder', 'helpinghand', 'allyswitch', 'aromaticmist', 'holdhands', 'coaching'].includes(id)) return fail();
   if (id === 'auroraveil' && !['snow', 'hail'].includes(weather(b))) return fail();
   if (id === 'poltergeist' && !target.item) return fail();
+  if (id === 'dreameater' && target.status !== 'slp' && target.ability !== 'comatose') { msg(b, "It doesn't affect " + name(target) + '...'); return false; }
+  if (id === 'synchronoise' && !target.types.some(t => user.types.includes(t))) { msg(b, "It doesn't affect " + name(target) + '...'); return false; }
+  if (['afteryou', 'spotlight'].includes(id)) return fail();
   if (id === 'steelroller' && !b.field.terrain) return fail();
   if (id === 'lastresort' && user.moves.length < 2) return fail();
   if (id === 'teleport' && !benchIndexes(b, user.side).length) return fail();
@@ -874,6 +880,7 @@ export const ITEM_NAMES = {};
 
 function applyHitDamage(b, user, target, damage, move, crit, eff) {
   let d = Math.min(damage, target.hp);
+  if ((move.id === 'falseswipe' || move.id === 'holdback') && d >= target.hp) d = target.hp - 1;
   const full = target.hp === target.maxhp;
   if (d >= target.hp) {
     if (target.volatiles.endure) { d = target.hp - 1; msg(b, Name(target) + ' endured the hit!'); }

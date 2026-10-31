@@ -1,18 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-import {
-  GoogleAuthProvider,
-  getAuth,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut
-} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-import {
-  doc,
-  getDoc,
-  getFirestore,
-  serverTimestamp,
-  setDoc
-} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+import * as E from './js/engine.js';
+import * as G from './js/game.js';
+
+// Firebase is loaded lazily so the game still works if the Firebase CDN is
+// unreachable; only sign-in, cloud saves and leaderboards are affected.
 
 const firebaseConfig = {
   apiKey: "AIzaSyAoOPSRcfDNqHsbAw3s771xttxmkQFZRFA",
@@ -23,471 +13,1303 @@ const firebaseConfig = {
   appId: "1:484956920261:web:baed770f30ff57affd53ac",
   measurementId: "G-71KJCN6WBP"
 };
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: "select_account" });
+const FIREBASE_CDN = 'https://www.gstatic.com/firebasejs/13.1.0/';
+let fb = null, auth = null, db = null, googleProvider = null;
+async function loadFirebase() {
+  const [appMod, authMod, fsMod] = await Promise.all(['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js'].map(f => import(FIREBASE_CDN + f)));
+  fb = { ...authMod, ...fsMod };
+  const firebaseApp = appMod.initializeApp(firebaseConfig);
+  auth = fb.getAuth(firebaseApp);
+  db = fb.getFirestore(firebaseApp);
+  googleProvider = new fb.GoogleAuthProvider();
+  googleProvider.setCustomParameters({ prompt: "select_account" });
+}
 
 (() => {
 'use strict';
 
+const SPR = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites';
 const API = 'https://pokeapi.co/api/v2';
-const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
-const STORAGE_KEY = 'pokeduel-save-v1';
-const LOCAL_MODIFIED_KEY = 'pokeduel-save-modified-v1';
-const DAILY = ['easy','medium','hard'];
-const REWARDS = {easy:{xp:80,coins:40,level:8},medium:{xp:160,coins:75,level:12},hard:{xp:300,coins:150,level:16},practice:{xp:28,coins:12,level:10}};
-const STARTERS_BY_GEN = {
-  1:[1,4,7], 2:[152,155,158], 3:[252,255,258],
-  4:[387,390,393], 5:[495,498,501], 6:[650,653,656],
-  7:[722,725,728], 8:[810,813,816], 9:[906,909,912]
-};
-const REGION_NAMES = {1:'KANTO',2:'JOHTO',3:'HOENN',4:'SINNOH',5:'UNOVA',6:'KALOS',7:'ALOLA',8:'GALAR',9:'PALDEA'};
-const GEN_ROMAN = {1:'I',2:'II',3:'III',4:'IV',5:'V',6:'VI',7:'VII',8:'VIII',9:'IX'};
-const STARTERS = Object.values(STARTERS_BY_GEN).flat();
-let selectedStarterId = null;
-let selectedStarterInfo = null;
-let starterChoosing = false;
-let activeStarterGen = 1;
-const ENEMY_POOLS = {
- easy:[16,19,10,13,25,39,41,43,46,48,52,54,56,60,66,69,72,74,90,98],
- medium:[37,58,63,66,79,92,104,109,133,147,161,163,179,187,194,198,200,215,220,228,236,239,240,252,255,258,261,263,270,273,280,283,290,300,304,307,311,312],
- hard:[6,9,18,34,38,45,59,62,65,68,94,103,130,131,134,142,149,154,157,160,181,196,197,208,212,214,230,248,257,260,282,303,306,334,350,373,376,405,448,464,475,487,493,530,609,635,658,681,700,715,724,738,745,778,791,792,887,889,908,911,920,937,998,1000,1007,1017,1024,1025]
-};
-const FALLBACK_MOVES = {
- normal:[{name:'Tackle',type:'normal',power:40,accuracy:100,category:'physical'},{name:'Quick Attack',type:'normal',power:40,accuracy:100,category:'physical',priority:1},{name:'Slam',type:'normal',power:80,accuracy:75,category:'physical'},{name:'Swift',type:'normal',power:60,accuracy:100,category:'special'}],
- fire:[{name:'Ember',type:'fire',power:40,accuracy:100,category:'special'},{name:'Flame Charge',type:'fire',power:50,accuracy:100,category:'physical'},{name:'Fire Fang',type:'fire',power:65,accuracy:95,category:'physical'},{name:'Flamethrower',type:'fire',power:90,accuracy:100,category:'special'}],
- water:[{name:'Water Gun',type:'water',power:40,accuracy:100,category:'special'},{name:'Aqua Jet',type:'water',power:40,accuracy:100,category:'physical',priority:1},{name:'Bubble Beam',type:'water',power:65,accuracy:100,category:'special'},{name:'Surf',type:'water',power:90,accuracy:100,category:'special'}],
- grass:[{name:'Vine Whip',type:'grass',power:45,accuracy:100,category:'physical'},{name:'Razor Leaf',type:'grass',power:55,accuracy:95,category:'physical'},{name:'Magical Leaf',type:'grass',power:60,accuracy:100,category:'special'},{name:'Energy Ball',type:'grass',power:90,accuracy:100,category:'special'}],
- electric:[{name:'Thunder Shock',type:'electric',power:40,accuracy:100,category:'special'},{name:'Quick Attack',type:'normal',power:40,accuracy:100,category:'physical',priority:1},{name:'Spark',type:'electric',power:65,accuracy:100,category:'physical'},{name:'Thunderbolt',type:'electric',power:90,accuracy:100,category:'special'}],
- psychic:[{name:'Confusion',type:'psychic',power:50,accuracy:100,category:'special'},{name:'Psybeam',type:'psychic',power:65,accuracy:100,category:'special'},{name:'Swift',type:'normal',power:60,accuracy:100,category:'special'},{name:'Psychic',type:'psychic',power:90,accuracy:100,category:'special'}],
- bug:[{name:'Bug Bite',type:'bug',power:60,accuracy:100,category:'physical'},{name:'Struggle Bug',type:'bug',power:50,accuracy:100,category:'special'},{name:'Headbutt',type:'normal',power:70,accuracy:100,category:'physical'},{name:'X-Scissor',type:'bug',power:80,accuracy:100,category:'physical'}],
- poison:[{name:'Acid',type:'poison',power:40,accuracy:100,category:'special'},{name:'Poison Sting',type:'poison',power:15,accuracy:100,category:'physical'},{name:'Sludge',type:'poison',power:65,accuracy:100,category:'special'},{name:'Sludge Bomb',type:'poison',power:90,accuracy:100,category:'special'}],
- ground:[{name:'Mud-Slap',type:'ground',power:20,accuracy:100,category:'special'},{name:'Bulldoze',type:'ground',power:60,accuracy:100,category:'physical'},{name:'Rock Tomb',type:'rock',power:60,accuracy:95,category:'physical'},{name:'Earthquake',type:'ground',power:100,accuracy:100,category:'physical'}],
- fighting:[{name:'Rock Smash',type:'fighting',power:40,accuracy:100,category:'physical'},{name:'Low Sweep',type:'fighting',power:65,accuracy:100,category:'physical'},{name:'Brick Break',type:'fighting',power:75,accuracy:100,category:'physical'},{name:'Close Combat',type:'fighting',power:120,accuracy:100,category:'physical'}],
- rock:[{name:'Rock Throw',type:'rock',power:50,accuracy:90,category:'physical'},{name:'Rock Tomb',type:'rock',power:60,accuracy:95,category:'physical'},{name:'Rock Slide',type:'rock',power:75,accuracy:90,category:'physical'},{name:'Stone Edge',type:'rock',power:100,accuracy:80,category:'physical'}],
- ghost:[{name:'Astonish',type:'ghost',power:30,accuracy:100,category:'physical'},{name:'Hex',type:'ghost',power:65,accuracy:100,category:'special'},{name:'Shadow Claw',type:'ghost',power:70,accuracy:100,category:'physical'},{name:'Shadow Ball',type:'ghost',power:80,accuracy:100,category:'special'}],
- dragon:[{name:'Twister',type:'dragon',power:40,accuracy:100,category:'special'},{name:'Dragon Breath',type:'dragon',power:60,accuracy:100,category:'special'},{name:'Dragon Claw',type:'dragon',power:80,accuracy:100,category:'physical'},{name:'Dragon Pulse',type:'dragon',power:85,accuracy:100,category:'special'}],
- dark:[{name:'Bite',type:'dark',power:60,accuracy:100,category:'physical'},{name:'Feint Attack',type:'dark',power:60,accuracy:100,category:'physical'},{name:'Crunch',type:'dark',power:80,accuracy:100,category:'physical'},{name:'Dark Pulse',type:'dark',power:80,accuracy:100,category:'special'}],
- steel:[{name:'Metal Claw',type:'steel',power:50,accuracy:95,category:'physical'},{name:'Bullet Punch',type:'steel',power:40,accuracy:100,category:'physical',priority:1},{name:'Iron Head',type:'steel',power:80,accuracy:100,category:'physical'},{name:'Flash Cannon',type:'steel',power:80,accuracy:100,category:'special'}],
- ice:[{name:'Powder Snow',type:'ice',power:40,accuracy:100,category:'special'},{name:'Ice Shard',type:'ice',power:40,accuracy:100,category:'physical',priority:1},{name:'Ice Beam',type:'ice',power:90,accuracy:100,category:'special'},{name:'Blizzard',type:'ice',power:110,accuracy:70,category:'special'}],
- fairy:[{name:'Fairy Wind',type:'fairy',power:40,accuracy:100,category:'special'},{name:'Draining Kiss',type:'fairy',power:50,accuracy:100,category:'special'},{name:'Play Rough',type:'fairy',power:90,accuracy:90,category:'physical'},{name:'Moonblast',type:'fairy',power:95,accuracy:100,category:'special'}],
- flying:[{name:'Peck',type:'flying',power:35,accuracy:100,category:'physical'},{name:'Wing Attack',type:'flying',power:60,accuracy:100,category:'physical'},{name:'Air Slash',type:'flying',power:75,accuracy:95,category:'special'},{name:'Brave Bird',type:'flying',power:120,accuracy:100,category:'physical'}]
-};
-const TYPE_CHART = {
- normal:{rock:.5,ghost:0,steel:.5},fire:{fire:.5,water:.5,grass:2,ice:2,bug:2,rock:.5,dragon:.5,steel:2},
- water:{fire:2,water:.5,grass:.5,ground:2,rock:2,dragon:.5},electric:{water:2,electric:.5,grass:.5,ground:0,flying:2,dragon:.5},
- grass:{fire:.5,water:2,grass:.5,poison:.5,ground:2,flying:.5,bug:.5,rock:2,dragon:.5,steel:.5},
- ice:{fire:.5,water:.5,grass:2,ice:.5,ground:2,flying:2,dragon:2,steel:.5},
- fighting:{normal:2,ice:2,poison:.5,flying:.5,psychic:.5,bug:.5,rock:2,ghost:0,dark:2,steel:2,fairy:.5},
- poison:{grass:2,poison:.5,ground:.5,rock:.5,ghost:.5,steel:0,fairy:2},ground:{fire:2,electric:2,grass:.5,poison:2,flying:0,bug:.5,rock:2,steel:2},
- flying:{electric:.5,grass:2,fighting:2,bug:2,rock:.5,steel:.5},psychic:{fighting:2,poison:2,psychic:.5,dark:0,steel:.5},
- bug:{fire:.5,grass:2,fighting:.5,poison:.5,flying:.5,psychic:2,ghost:.5,dark:2,steel:.5,fairy:.5},
- rock:{fire:2,ice:2,fighting:.5,ground:.5,flying:2,bug:2,steel:.5},ghost:{normal:0,psychic:2,ghost:2,dark:.5},
- dragon:{dragon:2,steel:.5,fairy:0},dark:{fighting:.5,psychic:2,ghost:2,dark:.5,fairy:.5},
- steel:{fire:.5,water:.5,electric:.5,ice:2,rock:2,steel:.5,fairy:2},fairy:{fire:.5,fighting:2,poison:.5,dragon:2,dark:2,steel:.5}
-};
+// v2 saves live under a new key so the v1 prototype save is never overwritten.
+const STORAGE_KEY = 'pokeduel-save-v2';
+const LEGACY_KEY = 'pokeduel-save-v1';
+const BACKUP_KEY = 'pokeduel-save-backup';
+const LOCAL_MODIFIED_KEY = 'pokeduel-save-modified-v2';
+const LEGACY_MODIFIED_KEY = 'pokeduel-save-modified-v1';
+const DAILY = ['easy', 'medium', 'hard'];
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
-const cap = s => (s||'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-const slug = s => String(s||'').toLowerCase().trim();
-const todayKey = () => {const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
-const xpNeeded = level => Math.max(100,level*level*18);
-const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
-const deep = o => JSON.parse(JSON.stringify(o));
-function defaultSave(){return {version:1,coins:250,starterChosen:false,starterId:null,party:[],selectedId:null,inventory:{potion:2,candy:0,ball:0},dailyDate:todayKey(),daily:{easy:null,medium:null,hard:null},wins:0,battles:0,practiceCount:0,ownedDex:[],settings:{animations:true,reducedEffects:false},lastActive:''}}
-let save = readSave();
-const initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
-let currentUser = null;
-let authReady = false;
-let applyingRemoteSave = false;
-let booting = true;
-let cloudSaveTimer = null;
-let cloudWriteQueue = Promise.resolve();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Math.round(n).toLocaleString();
+const sleep = ms => new Promise(r => setTimeout(r, save?.settings?.reducedEffects ? Math.min(ms, 120) : ms / (Number(save?.settings?.battleSpeed) || 1)));
+const D = () => G.gameData.dex;
+const M = () => G.gameData.moves;
+const sp = p => D()[p.species];
+const tclass = t => 't-' + String(t || 'unknown').toLowerCase().replace(/[^a-z]/g, '').replace('???', 'unknown');
+
+// ---------- Sprites (PokéAPI sprite repository) ----------
+const img = {
+  icon: (n, s) => `${SPR}/pokemon/${s ? 'shiny/' : ''}${n}.png`,
+  art: (n, s) => `${SPR}/pokemon/other/home/${s ? 'shiny/' : ''}${n}.png`,
+  front: (n, s) => `${SPR}/pokemon/other/showdown/${s ? 'shiny/' : ''}${n}.gif`,
+  back: (n, s) => `${SPR}/pokemon/other/showdown/back/${s ? 'shiny/' : ''}${n}.gif`,
+};
+const pic = (src, fallbacks = [], attrs = '') => `<img src="${esc(src)}" data-fb="${esc(fallbacks.join('|'))}" ${attrs} decoding="async">`;
+// Small icons appear in long grids, so they load lazily; large artwork loads eagerly.
+const iconOf = (n, s, alt = '') => pic(img.icon(n, s), [img.icon(n, false), img.art(n, s)], `alt="${esc(alt)}" loading="lazy"`);
+const artOf = (n, s, alt = '') => pic(img.art(n, s), [img.art(n, false), img.icon(n, s)], `alt="${esc(alt)}"`);
+const preload = src => { const i = new Image(); i.src = src; };
+document.addEventListener('error', e => {
+  const t = e.target;
+  if (t.tagName !== 'IMG' || !t.dataset.fb) return;
+  const list = t.dataset.fb.split('|').filter(Boolean);
+  const next = list.shift();
+  t.dataset.fb = list.join('|');
+  if (next) t.src = next; else { t.removeAttribute('data-fb'); t.style.visibility = 'hidden'; }
+}, true);
+const typeChips = types => '<span class="types">' + types.map(t => `<span class="type ${tclass(t)}">${esc(t)}</span>`).join('') + '</span>';
+const hpCls = pct => pct <= 20 ? 'lo' : pct <= 50 ? 'mid' : '';
+const genderIcon = g => g === 'M' ? '<span class="g g-M" aria-label="male">♂</span>' : g === 'F' ? '<span class="g g-F" aria-label="female">♀</span>' : '';
+
+// ---------- State ----------
+let save = null;
+let currentUser = null, authReady = false, applyingRemoteSave = false, booting = true;
+let cloudSaveTimer = null, cloudWriteQueue = Promise.resolve(), lbTimer = null;
 let authStatusMessage = 'Not signed in. Progress stays on this device.';
-let battle = null;
-let activePage = 'home';
-let dexOffset = 0, dexLoaded = [], dexBusy = false, allPokemonList = null;
+let activeScreen = 'home';
 let toastTimer = null;
-const pokemonCache = new Map();
-const moveCache = new Map();
+let initialLocalSaveTimestamp = 0;
+const ui = { boxPage: 0, sel: null, sumTab: 'info', boxSearch: '', boxSort: 'recent', shopCat: 'boxes', shopSel: null, shopQty: 1, bagCat: 'medicine', bagSel: null, dexShown: 120, rankTab: 'score', starterGen: 1, starterSel: null };
 
-function readSave(){try{const v=JSON.parse(localStorage.getItem(STORAGE_KEY));return v&&v.version===1?{...defaultSave(),...v,inventory:{...defaultSave().inventory,...(v.inventory||{})},settings:{...defaultSave().settings,...(v.settings||{})}}:defaultSave()}catch(e){return defaultSave()}}
-function persist(){
- save.lastActive=new Date().toISOString();
- try{
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(save));
-  if(!booting&&!applyingRemoteSave)localStorage.setItem(LOCAL_MODIFIED_KEY,String(Date.now()));
- }catch(e){console.warn('Could not save locally',e)}
- updateHeader();
- if(!booting&&!applyingRemoteSave&&currentUser&&authReady)scheduleCloudSave();
+// ---------- Save / persistence ----------
+function readSave() {
+  try {
+    const v2 = localStorage.getItem(STORAGE_KEY);
+    if (v2) { const s = G.migrateSave(JSON.parse(v2)); if (s) return s; }
+    const v1 = localStorage.getItem(LEGACY_KEY);
+    if (v1) {
+      const s = G.migrateSave(JSON.parse(v1));
+      if (s) { setTimeout(() => toast('Your save was upgraded! Existing Pokémon received natures, IVs and abilities.'), 1200); return s; }
+    }
+  } catch (e) { console.warn('Could not read save', e); }
+  return G.defaultSave();
 }
-function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2400)}
-function getLocalSaveModifiedAt(){
- try{
-  const saved=Number(localStorage.getItem(LOCAL_MODIFIED_KEY));
-  if(Number.isFinite(saved)&&saved>0)return saved;
- }catch(e){}
- return initialLocalSaveTimestamp;
+function persist() {
+  save.lastActive = new Date().toISOString();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+    if (!booting && !applyingRemoteSave) localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now()));
+  } catch (e) { console.warn('Could not save locally', e); toast('Could not save to this browser (storage full or blocked).'); }
+  updateHud();
+  if (!booting && !applyingRemoteSave && currentUser && authReady) { scheduleCloudSave(); scheduleLeaderboard(); }
 }
-function normaliseSave(raw){
- if(!raw||raw.version!==1)return null;
- const base=defaultSave();
- const normalized={
-  ...base,...raw,
-  inventory:{...base.inventory,...(raw.inventory||{})},
-  settings:{...base.settings,...(raw.settings||{})},
-  daily:{...base.daily,...(raw.daily||{})},
-  party:Array.isArray(raw.party)?raw.party:[],
-  ownedDex:Array.isArray(raw.ownedDex)?[...new Set(raw.ownedDex.map(Number).filter(n=>Number.isFinite(n)&&n>0))]:[]
- };
- normalized.coins=Number.isFinite(Number(normalized.coins))?Math.max(0,Number(normalized.coins)):base.coins;
- normalized.wins=Number.isFinite(Number(normalized.wins))?Math.max(0,Number(normalized.wins)):0;
- normalized.battles=Number.isFinite(Number(normalized.battles))?Math.max(0,Number(normalized.battles)):0;
- normalized.practiceCount=Number.isFinite(Number(normalized.practiceCount))?Math.max(0,Number(normalized.practiceCount)):0;
- normalized.starterChosen=Boolean(normalized.starterChosen);
- return normalized;
+function getLocalSaveModifiedAt() {
+  try {
+    const v = Number(localStorage.getItem(LOCAL_MODIFIED_KEY)) || Number(localStorage.getItem(LEGACY_MODIFIED_KEY));
+    if (Number.isFinite(v) && v > 0) return v;
+  } catch (e) {}
+  return initialLocalSaveTimestamp;
 }
-function setAuthStatus(message){
- authStatusMessage=message;
- const status=$('#authStatus');
- if(status)status.textContent=currentUser?authStatusMessage:'Not signed in. Progress stays on this device.';
+function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800); }
+
+// ---------- Firebase auth + cloud save (unchanged strategy: last-modified wins) ----------
+function setAuthStatus(message) { authStatusMessage = message; const s = $('#authStatus'); if (s) s.textContent = currentUser ? authStatusMessage : 'Not signed in. Progress stays on this device.'; }
+function renderAuthState() {
+  const a = $('#googleSignIn'), b = $('#googleSignOut');
+  if (a) a.hidden = !!currentUser;
+  if (b) b.hidden = !currentUser;
+  const n = $('#profileName'); if (n) n.textContent = currentUser ? (currentUser.displayName || 'Signed in') : 'Guest (this device only)';
+  setAuthStatus(authStatusMessage);
 }
-function renderAuthState(){
- const signIn=$('#googleSignIn'),signOutButton=$('#googleSignOut');
- if(signIn)signIn.hidden=Boolean(currentUser);
- if(signOutButton)signOutButton.hidden=!currentUser;
- const name=$('#profileName');
- if(name)name.textContent=currentUser?.displayName||'ROOKIE TRAINER';
- const status=$('#authStatus');
- if(status)status.textContent=currentUser?authStatusMessage:'Not signed in. Progress stays on this device.';
+function authErrorMessage(error) {
+  const code = error?.code || '';
+  if (code === 'auth/unauthorized-domain') return 'This domain is not authorised. Add it under Firebase Authentication → Settings → Authorised domains.';
+  if (code === 'auth/operation-not-allowed') return 'Google sign-in is not enabled yet. Enable Google in Firebase Authentication → Sign-in method.';
+  if (code === 'auth/popup-blocked') return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.';
+  if (code === 'auth/popup-closed-by-user') return 'Google sign-in was cancelled.';
+  if (code === 'auth/network-request-failed') return 'Network error during sign-in. Check your connection and try again.';
+  if (code === 'permission-denied' || code === 'firestore/permission-denied') return 'Firestore denied the request. Publish the rules in firestore.rules (users/{uid} and leaderboard/{uid}).';
+  return error?.message || 'Something went wrong. Check the browser console for details.';
 }
-function authErrorMessage(error){
- const code=error?.code||'';
- if(code==='auth/unauthorized-domain')return 'This domain is not authorised. Add pokeduel-henna.vercel.app under Firebase Authentication → Settings → Authorised domains.';
- if(code==='auth/operation-not-allowed')return 'Google sign-in is not enabled yet. Enable Google in Firebase Authentication → Sign-in method.';
- if(code==='auth/popup-blocked')return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.';
- if(code==='auth/popup-closed-by-user')return 'Google sign-in was cancelled.';
- if(code==='auth/network-request-failed')return 'Network error during sign-in. Check your connection and try again.';
- if(code==='permission-denied'||code==='firestore/permission-denied')return 'Firestore denied the save. Check that Firestore is created and its rules allow each signed-in user to access only their own /users/{uid} document.';
- return error?.message||'Something went wrong. Check the browser console for details.';
+function writeCloudSave(user, snapshotSave) {
+  const snapshot = JSON.parse(JSON.stringify(snapshotSave));
+  const op = async () => {
+    await fb.setDoc(fb.doc(db, 'users', user.uid), { schemaVersion: 2, saveData: snapshot, displayName: user.displayName || null, email: user.email || null, photoURL: user.photoURL || null, updatedAt: fb.serverTimestamp() }, { merge: true });
+    try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now())); } catch (e) {}
+  };
+  cloudWriteQueue = cloudWriteQueue.then(op, op);
+  return cloudWriteQueue;
 }
-function writeCloudSave(user,saveSnapshot){
- const snapshot=deep(saveSnapshot);
- const operation=async()=>{
-  await setDoc(doc(db,'users',user.uid),{
-   schemaVersion:1,
-   saveData:snapshot,
-   displayName:user.displayName||null,
-   email:user.email||null,
-   photoURL:user.photoURL||null,
-   updatedAt:serverTimestamp()
-  },{merge:true});
-  try{localStorage.setItem(LOCAL_MODIFIED_KEY,String(Date.now()))}catch(e){}
- };
- cloudWriteQueue=cloudWriteQueue.then(operation,operation);
- return cloudWriteQueue;
+function scheduleCloudSave() {
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => {
+    cloudSaveTimer = null;
+    if (!currentUser || !authReady || applyingRemoteSave) return;
+    const user = currentUser;
+    writeCloudSave(user, save).then(() => { if (currentUser?.uid === user.uid) setAuthStatus('Signed in · cloud save synced.'); })
+      .catch(err => { console.error('PokeDuel cloud save failed:', err); if (currentUser?.uid === user.uid) setAuthStatus('Signed in, but cloud save failed: ' + authErrorMessage(err)); });
+  }, 650);
 }
-function scheduleCloudSave(){
- if(cloudSaveTimer)clearTimeout(cloudSaveTimer);
- cloudSaveTimer=setTimeout(()=>{
-  cloudSaveTimer=null;
-  if(!currentUser||!authReady||applyingRemoteSave)return;
-  const user=currentUser;
-  const snapshot=deep(save);
-  writeCloudSave(user,snapshot).then(()=>{
-   if(currentUser?.uid===user.uid)setAuthStatus('Signed in · cloud save synced.');
-  }).catch(error=>{
-   console.error('PokeDuel cloud save failed:',error);
-   if(currentUser?.uid===user.uid)setAuthStatus('Signed in, but cloud save failed: '+authErrorMessage(error));
+async function syncSignedInUser(user) {
+  setAuthStatus('Signed in · checking your cloud save…');
+  try {
+    const snap = await fb.getDoc(fb.doc(db, 'users', user.uid));
+    if (!snap.exists()) { await writeCloudSave(user, save); setAuthStatus('Signed in · this device’s progress was backed up to your account.'); toast('Progress backed up to your account.'); scheduleLeaderboard(); return; }
+    const data = snap.data();
+    const remote = G.migrateSave(data.saveData);
+    if (!remote) throw new Error('The cloud save format is missing or unsupported. Your local save has not been deleted.');
+    const cloudAt = Number(data.updatedAt?.toMillis?.() || Date.parse(remote.lastActive || '') || 0);
+    if (getLocalSaveModifiedAt() > cloudAt) { await writeCloudSave(user, save); setAuthStatus('Signed in · your newer local progress was synced to the cloud.'); toast('Your local progress was synced to your account.'); scheduleLeaderboard(); return; }
+    applyingRemoteSave = true;
+    save = remote; persist();
+    try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(cloudAt || Date.now())); } catch (e) {}
+    applyingRemoteSave = false;
+    afterSaveReplaced();
+    setAuthStatus('Signed in · cloud save synced.'); toast('Your account save has been loaded.');
+    scheduleLeaderboard();
+  } catch (err) {
+    applyingRemoteSave = false;
+    console.error('PokeDuel cloud sync failed:', err);
+    setAuthStatus('Signed in, but cloud sync is unavailable: ' + authErrorMessage(err)); toast('Signed in, but cloud saving needs setup.');
+  }
+}
+async function startFirebaseAuth() {
+  try { await loadFirebase(); }
+  catch (err) {
+    console.warn('Firebase could not be loaded:', err);
+    authStatusMessage = 'Cloud features are unavailable right now (could not reach Firebase). Your progress is saved on this device.';
+    const st = $('#authStatus'); if (st) st.textContent = authStatusMessage;
+    const btn = $('#googleSignIn'); if (btn) { btn.disabled = true; btn.title = 'Firebase could not be loaded'; }
+    ui.firebaseDown = true;
+    return;
+  }
+  $('#googleSignIn').addEventListener('click', async () => {
+    const btn = $('#googleSignIn'); btn.disabled = true;
+    try { await fb.signInWithPopup(auth, googleProvider); }
+    catch (err) { console.error('Google sign-in failed:', err); const m = authErrorMessage(err); setAuthStatus(m); toast(m); }
+    finally { btn.disabled = false; }
   });
- },650);
-}
-function refreshAfterCloudRestore(){
- checkNewDay();
- if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');
- else document.body.classList.remove('reduced-effects');
- renderHome();renderProfile();
- if(save.starterChosen){pageTo('home');renderTeam()}else{pageTo('starter')}
- updateHeader();
-}
-async function syncSignedInUser(user){
- setAuthStatus('Signed in · checking your cloud save…');
- try{
-  const userRef=doc(db,'users',user.uid);
-  const snap=await getDoc(userRef);
-  if(!snap.exists()){
-   await writeCloudSave(user,save);
-   setAuthStatus('Signed in · this device’s progress was backed up to your account.');
-   toast('PokeDuel progress backed up to your account.');
-   return;
-  }
-  const cloudData=snap.data();
-  const remoteSave=normaliseSave(cloudData.saveData);
-  if(!remoteSave)throw new Error('The cloud save format is missing or unsupported. Your local save has not been deleted.');
-  const cloudUpdatedAt=Number(cloudData.updatedAt?.toMillis?.()||Date.parse(remoteSave.lastActive||'')||0);
-  const localUpdatedAt=getLocalSaveModifiedAt();
-  if(localUpdatedAt>cloudUpdatedAt){
-   await writeCloudSave(user,save);
-   setAuthStatus('Signed in · your newer local progress was synced to the cloud.');
-   toast('Your local progress was synced to your account.');
-   return;
-  }
-  applyingRemoteSave=true;
-  save=remoteSave;
-  persist();
-  try{localStorage.setItem(LOCAL_MODIFIED_KEY,String(cloudUpdatedAt||Date.now()))}catch(e){}
-  applyingRemoteSave=false;
-  refreshAfterCloudRestore();
-  setAuthStatus('Signed in · cloud save synced.');
-  toast('Your account save has been loaded.');
- }catch(error){
-  applyingRemoteSave=false;
-  console.error('PokeDuel cloud sync failed:',error);
-  const message=authErrorMessage(error);
-  setAuthStatus('Signed in, but cloud sync is unavailable: '+message);
-  toast('Signed in, but cloud saving needs setup.');
- }
-}
-function startFirebaseAuth(){
- $('#googleSignIn').addEventListener('click',async()=>{
-  const button=$('#googleSignIn');
-  button.disabled=true;
-  try{await signInWithPopup(auth,googleProvider)}
-  catch(error){
-   console.error('Google sign-in failed:',error);
-   const message=authErrorMessage(error);
-   setAuthStatus(message);toast(message);
-  }finally{button.disabled=false}
- });
- $('#googleSignOut').addEventListener('click',async()=>{
-  const button=$('#googleSignOut');
-  button.disabled=true;
-  try{
-   if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
-   if(currentUser&&authReady)await writeCloudSave(currentUser,save);
-   await signOut(auth);
-   toast('Signed out. Your local save is still available on this device.');
-  }catch(error){
-   console.error('Sign-out failed:',error);
-   const message=authErrorMessage(error);setAuthStatus(message);toast(message);
-  }finally{button.disabled=false}
- });
- onAuthStateChanged(auth,async user=>{
-  currentUser=user;
-  authReady=true;
-  renderAuthState();
-  if(user)await syncSignedInUser(user);
-  else setAuthStatus('Not signed in. Progress stays on this device.');
- });
+  $('#googleSignOut').addEventListener('click', async () => {
+    const btn = $('#googleSignOut'); btn.disabled = true;
+    try { clearTimeout(cloudSaveTimer); cloudSaveTimer = null; if (currentUser && authReady) await writeCloudSave(currentUser, save); await fb.signOut(auth); toast('Signed out. Your local save is still on this device.'); }
+    catch (err) { console.error('Sign-out failed:', err); const m = authErrorMessage(err); setAuthStatus(m); toast(m); }
+    finally { btn.disabled = false; }
+  });
+  fb.onAuthStateChanged(auth, async user => {
+    currentUser = user; authReady = true; renderAuthState();
+    if (user) await syncSignedInUser(user); else setAuthStatus('Not signed in. Progress stays on this device.');
+    if (activeScreen === 'leaderboard') renderRanks();
+  });
 }
 
-async function api(path){const url=path.startsWith('http')?path:API+path;const res=await fetch(url);if(!res.ok)throw new Error('PokéAPI request failed: '+res.status);return res.json()}
-async function getPokemon(id){const key=String(id);if(pokemonCache.has(key))return pokemonCache.get(key);const pending=api('/pokemon/'+encodeURIComponent(key)).then(p=>{pokemonCache.set(key,p);return p});pokemonCache.set(key,pending);try{const p=await pending;pokemonCache.set(key,p);return p}catch(e){pokemonCache.delete(key);throw e}}
-function pickSprite(p,back=false){
- const versions=p?.sprites?.versions||{};
- const em=versions['generation-iii']?.emerald;
- const bw=versions['generation-v']?.['black-white'];
- return (back?(em?.back_default||bw?.animated?.back_default||bw?.back_default||p?.sprites?.back_default):(em?.front_default||bw?.animated?.front_default||bw?.front_default||p?.sprites?.front_default))
- || p?.sprites?.other?.['official-artwork']?.front_default || SPRITES+'/'+p?.id+'.png';
+// ---------- Leaderboards (Firestore /leaderboard/{uid}) ----------
+const RANKS = [[0, 'Rookie'], [600, 'Trainer'], [2000, 'Ace Trainer'], [6000, 'Veteran'], [15000, 'Elite'], [40000, 'Champion']];
+const rankName = score => RANKS.filter(r => score >= r[0]).pop()[1];
+const trainerName = () => save.trainerName || 'Trainer';
+function leaderboardDoc() {
+  const showcase = (save.showcase.length ? save.showcase : save.party.slice(0, 3)).map(u => save.box.find(p => p.uid === u)).filter(Boolean).slice(0, 3)
+    .map(p => ({ num: sp(p).num, shiny: !!p.shiny, level: p.level, mark: p.mark || null }));
+  const daily = {};
+  for (const [k, v] of Object.entries(save.dailyScores || {})) if (G.dayDiff(k, G.todayKey()) <= 2) daily[k] = v;
+  return { name: trainerName().slice(0, 16), avatar: save.avatar || 25, score: G.trainerScore(save), wins: save.wins, dex: save.ownedDex.length, shinies: save.shinyDex.length,
+    streak: save.checkin.best || 0, showcase, daily, updatedAt: fb.serverTimestamp() };
 }
-function artwork(p){return p?.sprites?.other?.['official-artwork']?.front_default||pickSprite(p)||SPRITES+'/'+p?.id+'.png'}
-function statsFrom(p){const out={};(p.stats||[]).forEach(s=>out[s.stat.name]=s.base_stat);return out}
-function maxHp(p,level){const s=statsFrom(p);return Math.floor(((2*(s.hp||45)+(level*1.0))*level)/100)+level+10}
-function actualStat(p,level,stat){const v=(statsFrom(p)[stat]||45);return Math.floor(((2*v+31)*level)/100)+5}
-function getTypes(p){return (p.types||[]).sort((a,b)=>a.slot-b.slot).map(t=>t.type.name)}
-function randomChoice(arr){return arr[Math.floor(Math.random()*arr.length)]}
-function seededIndex(seed,len){let h=2166136261;for(let i=0;i<seed.length;i++){h^=seed.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0)%len}
-function addOwned(p,level=10){const id=p.id;const entry={uid:String(Date.now())+Math.random().toString(36).slice(2,7),pokemonId:id,name:p.name,level,xp:0};save.party.push(entry);if(!save.selectedId)save.selectedId=entry.uid;if(!save.ownedDex.includes(id))save.ownedDex.push(id);return entry}
-function chosen(){return save.party.find(p=>p.uid===save.selectedId)||save.party[0]||null}
-function rosterEntry(uid){return save.party.find(p=>p.uid===uid)}
-function updateShopWallet(){const e=$('#shopCoins');if(e)e.textContent=save.coins.toLocaleString()}
-function updateHeader(){const e=$('#coins');if(e)e.textContent=save.coins.toLocaleString();updateShopWallet();const count=DAILY.filter(k=>save.daily[k]).length;const prog=$('#dailyProgress');if(prog)prog.textContent=count+' / 3 CLEARED';DAILY.forEach(k=>{const el=$('#status-'+k);if(el){el.textContent=save.daily[k]?'COMPLETED':'AVAILABLE';el.classList.toggle('done',!!save.daily[k])}});const n=$('#potionCount');if(n)n.textContent='POTION × '+(save.inventory.potion||0)}
-function checkNewDay(){const key=todayKey();if(save.dailyDate!==key){save.dailyDate=key;save.daily={easy:null,medium:null,hard:null};persist();toast('A new day, a fresh gauntlet.')}$('#todayLabel').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}).toUpperCase()}
-function pageTo(name){
- if(!save.starterChosen&&name!=='starter'){name='starter'}
- activePage=name;
- document.body.classList.toggle('is-onboarding',name==='starter');
- document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
- document.querySelectorAll('.navlink').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
- window.scrollTo({top:0,behavior:save.settings.reducedEffects?'auto':'smooth'});
- if(name==='starter')renderStarterSelection();
- if(name==='home')renderHome();
- if(name==='team')renderTeam();
- if(name==='profile')renderProfile();
- if(name==='dex'&&!dexLoaded.length)loadDex(true);
- if(name==='shop')updateShopWallet();
+function scheduleLeaderboard() {
+  clearTimeout(lbTimer);
+  lbTimer = setTimeout(async () => {
+    if (!currentUser || !save.starterChosen) return;
+    try { await fb.setDoc(fb.doc(db, 'leaderboard', currentUser.uid), leaderboardDoc()); }
+    catch (err) { console.warn('Leaderboard publish failed:', err); ui.lbError = authErrorMessage(err); }
+  }, 2500);
 }
-function updateHomeStarter(){const e=chosen();if(e){$('#homeStarter').textContent=cap(e.name);$('#homeLevel').textContent='Lv. '+e.level+' · '+(e.level>=100?'MAX LEVEL':'Starter / Party Pokémon');$('#starterThumb').src=SPRITES+'/'+e.pokemonId+'.png';$('#homeXp').style.width=(e.level>=100?100:Math.min(100,e.xp/xpNeeded(e.level)*100))+'%'}else{$('#homeStarter').textContent='Choose your starter';$('#homeLevel').textContent='Your adventure begins here';$('#starterThumb').src=SPRITES+'/25.png';$('#homeXp').style.width='0%'}}
-function renderHome(){updateHeader();updateHomeStarter();const has=save.starterChosen;$$('[data-battle]').forEach(b=>{b.disabled=!has||!!save.daily[b.dataset.battle];b.style.opacity=b.disabled?'.45':'1'});$('#quickBattle').disabled=!has;$('#practiceBtn').disabled=!has;$('#dailyProgress').textContent=DAILY.filter(k=>save.daily[k]).length+' / 3 CLEARED'}
-async function renderTeam(){const prompt=$('#starterPrompt'),roster=$('#rosterSection');if(prompt)prompt.classList.add('hidden');if(roster)roster.classList.toggle('hidden',!save.starterChosen);$('#teamCount').textContent=save.party.length+' / 6 PARTY';if(!save.starterChosen){pageTo('starter');return}
-if(!save.party.length){save.starterChosen=false;persist();renderTeam();return}
-const cards=await Promise.all(save.party.map(async e=>{let p;try{p=await getPokemon(e.pokemonId)}catch(err){p={name:e.name,id:e.pokemonId,types:[{type:{name:'normal'},slot:1}],stats:[],sprites:{front_default:SPRITES+'/'+e.pokemonId+'.png'}}}
- const types=getTypes(p),active=save.selectedId===e.uid,st=statsFrom(p);return '<article class="pokemon-card" data-uid="'+escAttr(e.uid)+'"><img loading="lazy" src="'+escAttr(pickSprite(p))+'" alt="'+escAttr(cap(e.name))+'"><h3>'+esc(cap(e.name))+(active?' <span style="color:var(--cyan)">◆</span>':'')+'</h3><p>NO. '+String(e.pokemonId).padStart(3,'0')+' · LV. '+e.level+'</p><div class="types">'+types.map(t=>'<span class="type '+t+'">'+t+'</span>').join('')+'</div><div class="mini-bar"><i style="width:'+Math.min(100, e.level/100*100)+'%"></i></div><p style="margin-top:7px">XP '+e.xp+' / '+(e.level>=100?'MAX':xpNeeded(e.level))+'</p><div class="card-actions"><button class="btn '+(active?'primary':'ghost')+'" data-select="'+escAttr(e.uid)+'">'+(active?'ACTIVE':'SELECT')+'</button>'+(save.party.length>1?'<button class="btn ghost" data-release="'+escAttr(e.uid)+'">RELEASE</button>':'')+'</div></article>'}));$('#rosterGrid').innerHTML=cards.join('');$('#teamCount').textContent=save.party.length+' / 6 PARTY'}
-function renderProfile(){$('#profileStats').textContent='Battles won: '+save.wins+' · Battles fought: '+save.battles+' · Species caught: '+save.ownedDex.length;$('#animationsToggle').checked=save.settings.animations;$('#effectsToggle').checked=save.settings.reducedEffects;renderAuthState()}
-function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function escAttr(s){return esc(s).replace(/'/g,'&#39;')}
-function showModal(html){$('#modalContent').innerHTML=html;$('#modal').classList.remove('hidden')}
-function closeModal(){$('#modal').classList.add('hidden')}
-function levelUp(entry,amount){if(!entry)return;entry.xp+=amount;let ups=0;while(entry.level<100&&entry.xp>=xpNeeded(entry.level)){entry.xp-=xpNeeded(entry.level);entry.level++;ups++}if(entry.level>=100){entry.level=100;entry.xp=0}return ups}
-function gainCoins(n){save.coins=Math.max(0,save.coins+n)}
-async function renderStarterSelection(){
- if(save.starterChosen){pageTo('home');return}
- const grid=$('#onboardStarterGrid');if(!grid)return;
- document.querySelectorAll('.generation-tab').forEach(b=>b.classList.toggle('active',Number(b.dataset.gen)===activeStarterGen));
- $('#generationRegion').textContent='GENERATION '+String(activeStarterGen).padStart(2,'0')+' / '+REGION_NAMES[activeStarterGen];
- const titles={1:'THE ORIGINAL THREE',2:'THE JOHTO TRIO',3:'THE HOENN TRIO',4:'THE SINNOH TRIO',5:'THE UNOVA TRIO',6:'THE KALOS TRIO',7:'THE ALOLA TRIO',8:'THE GALAR TRIO',9:'THE PALDEA TRIO'};
- $('#generationTitle').textContent=titles[activeStarterGen];
- const requestedGen=activeStarterGen;
- const ids=STARTERS_BY_GEN[requestedGen];
- $('#starterCount').textContent='0'+activeStarterGen+' / 09';
- grid.innerHTML='<div class="starter-loading"><span class="loading-orbit"></span>Finding your first partners…</div>';
- try{
-  const starters=await Promise.all(ids.map(getPokemon));
-  if(activePage!=='starter'||requestedGen!==activeStarterGen)return;
-  grid.innerHTML=starters.map(p=>{
-   const type=getTypes(p)[0]||'normal';const isSelected=Number(selectedStarterId)===p.id;
-   const art=pickSprite(p)||p.sprites?.other?.['official-artwork']?.front_default;
-   return '<button type="button" class="onboard-starter-card '+(isSelected?'selected':'')+'" data-pick-starter="'+p.id+'"><span class="partner-bloom"></span><span class="partner-number">NO. '+String(p.id).padStart(3,'0')+'</span><img src="'+escAttr(art)+'" alt="'+escAttr(cap(p.name))+'" loading="eager"><span class="partner-name">'+esc(cap(p.name))+'</span><span class="type '+type+'">'+type+'</span><span class="partner-choose">'+(isSelected?'✓ YOUR PARTNER':'CHOOSE PARTNER')+'</span></button>'
+const RANK_TABS = { score: ['Trainer Score', 'score', v => fmt(v) + ' TP'], today: ['Today’s Gauntlet', 'daily', v => fmt(v) + ' pts'], shinies: ['Shiny Hunters', 'shinies', v => v + ' ✦'], dex: ['Pokédex', 'dex', v => v + ' / 1025'] };
+async function renderRanks() {
+  $('#rankTabs').innerHTML = Object.entries(RANK_TABS).map(([k, v]) => `<button role="tab" data-rank="${k}" class="${ui.rankTab === k ? 'on' : ''}" aria-selected="${ui.rankTab === k}">${v[0]}</button>`).join('');
+  const body = $('#rankBody');
+  const mine = { score: G.trainerScore(save), today: save.dailyScores?.[G.todayKey()] || 0, shinies: save.shinyDex.length, dex: save.ownedDex.length }[ui.rankTab];
+  const meCard = `<div class="rank-row me"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b></span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
+  if (ui.firebaseDown) { body.innerHTML = meCard + '<div class="empty"><b>Leaderboards unavailable</b><p>Firebase could not be reached. Check your connection and reload.</p></div>'; return; }
+  if (!currentUser) { body.innerHTML = meCard + `<div class="empty"><b>Sign in to compete</b><p>Leaderboards use your trainer name and scores only. Sign in with Google on the Trainer Card to publish your score.</p><button class="btn primary" data-go="profile">Go to Trainer Card</button></div>`; return; }
+  body.innerHTML = meCard + '<div class="loading"><span class="spinner"></span>Loading rankings…</div>';
+  try {
+    const [, field] = RANK_TABS[ui.rankTab];
+    const order = ui.rankTab === 'today' ? fb.orderBy(new fb.FieldPath('daily', G.todayKey()), 'desc') : fb.orderBy(field, 'desc');
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'leaderboard'), order, fb.limit(50)));
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!rows.length) { body.innerHTML = meCard + '<div class="empty">No scores yet today. Be the first!</div>'; return; }
+    body.innerHTML = meCard + rows.map((r, i) => {
+      const v = ui.rankTab === 'today' ? r.daily?.[G.todayKey()] || 0 : r[field] || 0;
+      const sc = (r.showcase || []).map(s => iconOf(s.num, s.shiny)).join('');
+      return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b><span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
+    }).join('');
+  } catch (err) {
+    console.error('Leaderboard load failed', err);
+    body.innerHTML = meCard + `<div class="empty"><b>Leaderboard unavailable</b><p>${esc(authErrorMessage(err))}</p><button class="btn ghost" data-rank="${ui.rankTab}">Try again</button></div>`;
+  }
+}
+
+// ---------- Helpers ----------
+const partyMons = () => save.party.map(u => save.box.find(p => p.uid === u)).filter(Boolean);
+const lead = () => partyMons()[0] || null;
+const byUid = u => save.box.find(p => p.uid === u);
+const topLevel = () => partyMons().reduce((m, p) => Math.max(m, p.level), 5);
+function bumpDay(stat, n = 1) {
+  const key = G.todayKey();
+  if (save.dayStats.date !== key) save.dayStats = { date: key, values: {} };
+  save.dayStats.values[stat] = (save.dayStats.values[stat] || 0) + n;
+}
+function addToCollection(p) {
+  save.box.push(p);
+  if (save.party.length < 6) save.party.push(p.uid);
+  const n = sp(p).num;
+  if (!save.ownedDex.includes(n)) save.ownedDex.push(n);
+  if (p.shiny && !save.shinyDex.includes(n)) save.shinyDex.push(n);
+}
+function checkMedals() {
+  for (const m of G.MEDALS) {
+    if (save.medals[m.id] || !m.test(save)) continue;
+    save.medals[m.id] = G.todayKey(); save.coins += m.reward;
+    toast('Medal earned: ' + m.name + '! +' + m.reward + ' coins');
+  }
+}
+function afterProgress() { checkMedals(); persist(); }
+function learnNewMoves(p, levels) {
+  const learned = [];
+  for (const l of levels) for (const m of G.levelUpMoves(p.species)) {
+    if (m.level !== l || !M()[m.id] || p.moves.includes(m.id)) continue;
+    if (p.moves.length < 4) p.moves.push(m.id); else if (!p.learned.includes(m.id)) p.learned.push(m.id);
+    learned.push(M()[m.id].name);
+  }
+  return learned;
+}
+function autoEvolutions(p) { return G.evolutionOptions(p, { inventory: {}, weather: G.dailyWeather(G.todayKey()).id, coins: save.coins }).filter(o => o.ok && !o.consume); }
+
+// ---------- Daily reset ----------
+function checkNewDay() {
+  const key = G.todayKey();
+  if (save.dailyDate !== key) { save.dailyDate = key; save.daily = { easy: null, medium: null, hard: null }; if (!booting) toast('A new day — a fresh gauntlet!'); }
+  for (const k of DAILY) if (save.daily[k]?.result === 'pending') { save.daily[k] = { result: 'loss', score: 0, date: key, abandoned: true }; setTimeout(() => toast('An unfinished daily battle counted as a loss.'), 900); }
+  if (save.missions.date !== key) save.missions = { date: key, list: G.dailyMissions(key), bonus: false };
+  if (save.dayStats.date !== key) save.dayStats = { date: key, values: {} };
+}
+
+// ---------- Navigation ----------
+const SCREENS = ['starter', 'home', 'boxes', 'shop', 'bag', 'dex', 'leaderboard', 'profile', 'medals', 'battle'];
+function go(name, opts = {}) {
+  if (name === 'practice') { startBattle('practice'); return; }
+  if (!SCREENS.includes(name)) name = 'home';
+  if (!save.starterChosen) name = 'starter';
+  if (activeScreen === 'battle' && name !== 'battle' && battleState && !battleState.b.ended) { confirmForfeit(() => go(name)); return; }
+  activeScreen = name;
+  document.body.classList.toggle('in-battle', name === 'battle');
+  $('#hud').hidden = name === 'starter' || name === 'battle';
+  $('#siteFoot').hidden = name === 'battle';
+  $$('.screen').forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+  $$('.hud-link').forEach(b => b.classList.toggle('active', b.dataset.go === name));
+  if (!opts.noHash && location.hash !== '#/' + name) history.pushState(null, '', '#/' + name);
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  ({ starter: renderStarter, home: renderHome, boxes: renderBoxes, shop: renderShop, bag: renderBag, dex: renderDex, leaderboard: renderRanks, profile: renderProfile, medals: renderMedals }[name] || (() => {}))();
+}
+function updateHud() {
+  if (!save) return;
+  $('#coins').textContent = fmt(save.coins);
+  for (const id of ['#shopCoins', '#bagCoins']) { const e = $(id); if (e) e.textContent = fmt(save.coins); }
+  const score = G.trainerScore(save);
+  $('#hudScore').textContent = fmt(score);
+  $('#hudName').textContent = trainerName();
+  $('#hudRank').textContent = rankName(score);
+  const a = $('#hudAvatar'); const src = img.icon(save.avatar || 25, false); if (a.getAttribute('src') !== src) a.src = src;
+}
+
+// ---------- Modal ----------
+let modalOnClose = null;
+function showModal(html, { wide = false, onClose = null, locked = false } = {}) {
+  $('#modalContent').innerHTML = html;
+  $('#modal .modal').classList.toggle('wide', wide);
+  $('#modal').classList.remove('hidden');
+  $('#modal').dataset.locked = locked ? '1' : '';
+  $('#modalClose').hidden = locked;
+  modalOnClose = onClose;
+  setTimeout(() => ($('#modalContent [autofocus]') || $('#modalContent button') || $('#modalClose')).focus?.(), 30);
+}
+function closeModal(force) {
+  if ($('#modal').dataset.locked && !force) return;
+  $('#modal').classList.add('hidden');
+  const cb = modalOnClose; modalOnClose = null;
+  cb?.();
+}
+function confirmBox(title, text, okLabel, onOk, danger) {
+  showModal(`<h2 id="modalTitle">${esc(title)}</h2><p>${text}</p><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn ${danger ? 'danger' : 'primary'}" id="confirmOk">${esc(okLabel)}</button></div>`);
+  $('#confirmOk').onclick = () => { closeModal(true); onOk(); };
+}
+// Pick a Pokémon from the collection. filter(p) → true | string (reason disabled)
+function pickPokemon(title, filter, onPick, { partyOnly = false } = {}) {
+  const list = partyOnly ? partyMons() : [...partyMons(), ...save.box.filter(p => !save.party.includes(p.uid))];
+  showModal(`<h2 id="modalTitle">${esc(title)}</h2><div class="pick-grid">${list.map(p => { const r = filter ? filter(p) : true; return `<button data-pick="${esc(p.uid)}" ${r === true ? '' : 'disabled title="' + esc(r) + '"'}>${iconOf(sp(p).num, p.shiny)}<span>${esc(p.nickname || sp(p).name)}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</span><small class="muted">Lv. ${p.level}${r !== true ? ' · ' + esc(r) : ''}</small></button>`; }).join('') || '<div class="empty">No Pokémon available.</div>'}</div>`, { wide: true });
+  $$('#modalContent [data-pick]').forEach(b => b.onclick = () => { closeModal(true); onPick(byUid(b.dataset.pick)); });
+}
+
+// ---------- Starter selection ----------
+function renderStarter() {
+  $('#generationBar').innerHTML = Object.keys(G.STARTERS_BY_GEN).map(g => `<button role="tab" class="gen-tab ${+g === ui.starterGen ? 'active' : ''}" data-gen="${g}" aria-selected="${+g === ui.starterGen}">Gen ${['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][g]}<small>${G.REGIONS['g' + g]}</small></button>`).join('');
+  $('#onboardStarterGrid').innerHTML = G.STARTERS_BY_GEN[ui.starterGen].map(n => {
+    const id = G.speciesByNum(n), d = D()[id];
+    return `<button type="button" class="starter-card ${ui.starterSel === id ? 'selected' : ''}" data-pick-starter="${id}" aria-pressed="${ui.starterSel === id}"><span class="no">No. ${String(n).padStart(4, '0')}</span>${artOf(n, false, d.name)}<b>${esc(d.name)}</b>${typeChips(d.types)}</button>`;
   }).join('');
-  updateStarterSelectionSummary();
- }catch(e){if(activePage==='starter'&&requestedGen===activeStarterGen)grid.innerHTML='<div class="empty-state starter-error"><span class="error-spark">✧</span><b>THE PARTNERS ARE HIDING</b><p>We could not reach the Pokédex. Check your connection, then try again.</p><button type="button" class="btn ghost" id="retryStarters">TRY AGAIN ↻</button></div>'}
+  const sel = ui.starterSel && D()[ui.starterSel];
+  $('#chosenSummary').innerHTML = sel ? `${artOf(sel.num, false, sel.name)}<div class="eyebrow">Your partner</div><h2>${esc(sel.name)}</h2>${typeChips(sel.types)}<p class="muted">Level 10 · Abilities: ${Object.entries(sel.ab).map(([k, a]) => esc(a) + (k === 'H' ? ' (hidden)' : '')).join(', ')}</p><div class="base-stats">${baseStatBars(sel)}</div>` : '<div class="eyebrow">Your partner</div><p class="muted">Pick a Pokémon. Every Pokémon you get rolls its own nature, IVs, ability, Tera Type — and might be shiny or carry a rare mark.</p>';
+  $('#confirmStarter').disabled = !sel;
+  if (!$('#starterName').value && save.trainerName) $('#starterName').value = save.trainerName;
 }
-function updateStarterSelectionSummary(){
- const pId=Number(selectedStarterId);const valid=STARTERS.includes(pId);
- const button=$('#confirmStarter');if(button){button.disabled=!valid||starterChoosing;if(!starterChoosing)button.innerHTML='BEGIN YOUR JOURNEY <span>↗</span>';}
- const summary=$('#chosenSummary');if(!summary)return;
- if(!valid){summary.innerHTML='<span class="chosen-empty">✦</span><span><b>YOUR PARTNER</b><small>Pick a Pokémon above</small></span>';return}
- const card=$('#onboardStarterGrid [data-pick-starter="'+pId+'"]');
- let name=card?.querySelector('.partner-name')?.textContent||selectedStarterInfo?.name||'Partner selected';
- let type=card?.querySelector('.type')?.textContent||selectedStarterInfo?.type||'';
- let pImage=card?.querySelector('img')?.src||selectedStarterInfo?.image||'';
- summary.innerHTML=(pImage?'<img src="'+escAttr(pImage)+'" alt="">':'<span class="chosen-empty">✦</span>')+'<span><b>'+esc(name)+'</b><small>LEVEL 10 · '+esc(type.toUpperCase())+' TYPE</small></span>';
+function confirmStarter() {
+  const id = ui.starterSel;
+  if (!id || save.starterChosen) return;
+  const name = $('#starterName').value.trim().replace(/[<>]/g, '').slice(0, 16);
+  save.trainerName = name || 'Trainer';
+  const p = G.generatePokemon(id, 10, { origin: 'starter', markContext: markCtx() });
+  p.friendship = 120;
+  addToCollection(p);
+  save.starterChosen = true; save.starterId = sp(p).num; save.avatar = sp(p).num;
+  afterProgress();
+  go('home');
+  revealModal(p, { title: 'Your adventure begins!', subtitle: sp(p).name + ' is your first partner.' });
 }
-function selectStarter(id){
- const gen=Number(Object.keys(STARTERS_BY_GEN).find(g=>STARTERS_BY_GEN[g].includes(Number(id))));
- if(!gen)return;selectedStarterId=Number(id);
- const selectedCard=$('#onboardStarterGrid [data-pick-starter="'+selectedStarterId+'"]');
- if(selectedCard)selectedStarterInfo={name:selectedCard.querySelector('.partner-name')?.textContent||'Partner selected',type:selectedCard.querySelector('.type')?.textContent||'',image:selectedCard.querySelector('img')?.src||''};
- if(gen!==activeStarterGen){activeStarterGen=gen;renderStarterSelection();return}
- document.querySelectorAll('#onboardStarterGrid [data-pick-starter]').forEach(card=>{const selected=Number(card.dataset.pickStarter)===selectedStarterId;card.classList.toggle('selected',selected);const action=card.querySelector('.partner-choose');if(action)action.textContent=selected?'✓ YOUR PARTNER':'CHOOSE PARTNER'});
- updateStarterSelectionSummary();
+
+// ---------- Home ----------
+function renderHome() {
+  checkNewDay();
+  const party = partyMons();
+  $('#partyCount').textContent = party.length + '/6';
+  $('#homeParty').innerHTML = party.map((p, i) => {
+    const st = G.statsOf(p);
+    return `<li><button class="party-row ${i === 0 ? 'lead' : ''}" data-open-mon="${esc(p.uid)}"><span><b>${esc(G.displayName(p))} ${p.shiny ? '<span class="shiny-star">✦</span>' : ''}</b><span class="hp"><span class="hp-label">HP</span><span class="hp-bar"><i style="width:100%"></i></span></span><span class="hpnum">${st.hp}/${st.hp}</span></span><span class="lv">Lv. ${p.level} ${genderIcon(p.gender)}</span>${iconOf(sp(p).num, p.shiny)}${p.item ? `<span class="held">${pic(G.itemSprite(p.item), [], 'alt=""')}</span>` : ''}</button></li>`;
+  }).join('') + Array.from({ length: 6 - party.length }, () => '<li><button class="party-row" data-go="boxes"><span class="muted">Empty slot</span></button></li>').join('');
+  const key = G.todayKey(), w = G.dailyWeather(key);
+  const claimed = save.checkin.last === key;
+  const nextDay = claimed ? ((save.checkin.streak - 1) % 7) + 1 : (G.dayDiff(save.checkin.last || '2000-01-01', key) === 1 ? (save.checkin.streak % 7) + 1 : 1);
+  const reward = G.CHECKIN_REWARDS[nextDay - 1];
+  $('#todayStrip').innerHTML = `
+    <div class="today-tile"><span class="big" aria-hidden="true">${w.icon}</span><span><b>${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</b><small>Today's weather: ${esc(w.name)}${w.mark ? ' · weather marks possible' : ''}</small></span></div>
+    <div class="today-tile checkin"><span class="big" aria-hidden="true">🗓</span><span><b>Day ${nextDay} check-in</b><small>${claimed ? 'Claimed · streak ' + save.checkin.streak : esc(reward.text) + ' · streak ' + (save.checkin.streak || 0)}</small></span>${claimed ? '' : '<button class="btn primary small" id="claimCheckin">Claim</button>'}</div>`;
+  const done = DAILY.filter(k => save.daily[k]).length;
+  $('#dailyProgress').textContent = done + ' / 3 cleared';
+  $('#dailyCards').innerHTML = DAILY.map((k, i) => {
+    const t = G.DAILY_TIERS[k], r = save.daily[k];
+    const tr = G.buildTrainer(k, key, topLevel());
+    return `<article class="daily-card ${k} ${r ? 'done' : ''}"><span class="tier">0${i + 1} · ${k}</span><h3>${t.name}</h3><div class="foes">${tr.team.map(p => iconOf(sp(p).num, false, r ? sp(p).name : 'Unknown Pokémon')).join('')}</div>
+      <span class="reward">${t.size} Pokémon · Lv. ${tr.level}${tr.sunday ? ' · Sunday legend!' : ''} · ${t.coins} coins + EXP</span>
+      ${r ? `<span class="result ${r.result}">${r.result === 'win' ? 'Cleared · ' + fmt(r.score) + ' pts' : 'Defeated'}</span>${r.result === 'win' ? `<button class="btn ghost small" data-share="${k}">Share result</button>` : ''}` : `<button class="btn primary" data-battle="${k}">Battle</button>`}</article>`;
+  }).join('');
+  const ms = save.missions.list;
+  const vals = save.dayStats.values;
+  $('#missionCount').textContent = ms.filter(m => m.claimed).length + '/3';
+  $('#missionList').innerHTML = ms.map((m, i) => {
+    const prog = Math.min(m.goal, vals[m.stat] || 0);
+    return `<li class="mission"><span><b>${esc(m.text)}</b> <small>· ${m.reward} coins</small></span>${m.claimed ? '<span class="tag">Done ✓</span>' : prog >= m.goal ? `<button class="btn primary small" data-claim-mission="${i}">Claim</button>` : `<small>${fmt(prog)}/${fmt(m.goal)}</small>`}<span class="bar"><i style="width:${prog / m.goal * 100}%"></i></span></li>`;
+  }).join('') + (ms.length && ms.every(m => m.claimed) ? `<li class="mission">${save.missions.bonus ? '<span class="tag">Bonus claimed ✓</span>' : '<button class="btn primary small" id="missionBonus">Claim bonus: Exp. Candy L</button>'}</li>` : '');
+  const ob = G.dailyOutbreak(key), od = D()[ob];
+  const left = Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0));
+  $('#outbreakCard').innerHTML = `${artOf(od.num, false, od.name)}<div><div class="eyebrow">Mass outbreak</div><h3>${esc(od.name)}</h3>${typeChips(od.types)}<p class="muted">Shiny odds 1/64 in today's Outbreak Box. ${left} left today.</p><button class="btn primary small" data-box="outbreak" ${left ? '' : 'disabled'}>Open · 90 coins</button></div>`;
+  updateHud();
 }
-function setStarter(id){
- if(save.starterChosen||starterChoosing)return;
- const picked=Number(id??selectedStarterId);
- if(!STARTERS.includes(picked)){toast('Choose a starter first.');return}
- starterChoosing=true;
- const confirm=$('#confirmStarter');if(confirm){confirm.disabled=true;confirm.textContent='MEETING YOUR PARTNER…'}
- getPokemon(picked).then(p=>{
-  if(save.starterChosen)return;
-  const entry=addOwned(p,10);save.starterChosen=true;save.starterId=picked;save.selectedId=entry.uid;
-  starterChoosing=false;persist();toast(cap(p.name)+' is joining your adventure!');renderHome();renderTeam();pageTo('home');
- }).catch(()=>{
-  starterChoosing=false;updateStarterSelectionSummary();toast('Could not load that Pokémon. Please try again.');
- });
+function claimCheckin() {
+  const key = G.todayKey();
+  if (save.checkin.last === key) return;
+  const cont = save.checkin.last && G.dayDiff(save.checkin.last, key) === 1;
+  save.checkin.streak = cont ? save.checkin.streak + 1 : 1;
+  save.checkin.best = Math.max(save.checkin.best || 0, save.checkin.streak);
+  save.checkin.last = key;
+  const r = G.CHECKIN_REWARDS[(save.checkin.streak - 1) % 7];
+  if (r.coins) save.coins += r.coins;
+  for (const [id, n] of Object.entries(r.items || {})) save.inventory[id] = (save.inventory[id] || 0) + n;
+  afterProgress(); renderHome();
+  if (r.box) openBox(r.box, true); else toast('Check-in reward: ' + r.text + '!');
 }
-function typeEffect(moveType,types){return types.reduce((v,t)=>v*((TYPE_CHART[moveType]||{})[t]??1),1)}
-function pickFallbacks(type){return deep(FALLBACK_MOVES[type]||FALLBACK_MOVES.normal)}
-async function getMoves(p,level){const version='scarlet-violet';let learnt=(p.moves||[]).map(m=>{const d=m.version_group_details||[];const vg=d.filter(x=>x.version_group?.name===version&&x.move_learn_method?.name==='level-up').sort((a,b)=>a.level_learned_at-b.level_learned_at);return {name:m.move.name,level:vg.length?vg[vg.length-1].level_learned_at:-1,detail:vg[vg.length-1]}}).filter(m=>m.level>=0&&m.level<=level).sort((a,b)=>a.level-b.level);
- learnt=learnt.filter((m,i,a)=>a.findIndex(x=>x.name===m.name)===i);
- const candidates=learnt.slice(-10).reverse();const results=[];
- for(const m of candidates){if(results.length>=4)break;try{results.push(await getMove(m.name))}catch(e){}}
- if(results.length<4){const base=getTypes(p)[0]||'normal';for(const m of pickFallbacks(base)){if(results.length>=4)break;if(!results.some(x=>x.name===m.name))results.push(m)}}
- while(results.length<4)results.push(...pickFallbacks('normal').slice(0,1));
- return results.slice(0,4)}
-async function getMove(name){if(moveCache.has(name))return moveCache.get(name);const promise=api('/move/'+encodeURIComponent(name)).then(m=>({name:cap(m.name),key:m.name,type:m.type?.name||'normal',power:m.power||0,accuracy:m.accuracy||100,category:m.damage_class?.name||'status',priority:m.priority||0,effectChance:m.effect_chance||0,pp:m.pp||10,effect:m.effect_entries?.find(e=>e.language?.name==='en')?.short_effect||''}));moveCache.set(name,promise);try{let m=await promise;moveCache.set(name,m);return m}catch(e){moveCache.delete(name);throw e}}
-function battleSprite(p,back){return pickSprite(p,back)||SPRITES+'/'+p.id+'.png'}
-function ensureBattleControls(){const el=$('#battleControls');if(!el.querySelector('[data-move]'))el.innerHTML='<button class="move-btn" data-move="0"><span>01</span><b>—</b><small>—</small></button><button class="move-btn" data-move="1"><span>02</span><b>—</b><small>—</small></button><button class="move-btn" data-move="2"><span>03</span><b>—</b><small>—</small></button><button class="move-btn" data-move="3"><span>04</span><b>—</b><small>—</small></button><button class="move-btn bag-btn" id="bagBtn"><span>＋</span><b>BAG</b><small id="potionCount">POTION × 0</small></button><button class="move-btn switch-btn" id="switchBtn"><span>⇄</span><b>SWITCH</b><small>PARTY</small></button>';updateHeader()}
-async function startBattle(kind){ensureBattleControls();if(!save.starterChosen||!chosen()){toast('Choose a starter before battling.');pageTo('team');return}checkNewDay();if(kind!=='practice'&&save.daily[kind]){toast('You already cleared this daily battle.');return}
- const playerEntry=chosen();let enemyId;
- if(kind==='practice'){enemyId=randomChoice(ENEMY_POOLS.easy.concat(ENEMY_POOLS.medium));}
- else {const pool=ENEMY_POOLS[kind];enemyId=pool[seededIndex(save.dailyDate+'-'+kind,pool.length)]}
- pageTo('battle');$('#battleLabel').textContent=(kind==='practice'?'PRACTICE ARENA':'DAILY BATTLE / '+kind.toUpperCase());$('#battleTurn').textContent='TURN 01';$('#battleLog').textContent='A challenger approaches…';$('#battleControls').classList.remove('hidden');$('#battleControls').querySelectorAll('button').forEach(b=>b.disabled=true);
- $('#playerName').textContent=cap(playerEntry.name);$('#playerLevel').textContent='Lv. '+playerEntry.level;$('#enemyName').textContent='LOADING…';$('#enemyLevel').textContent='—';
- try{const [pp,ep]=await Promise.all([getPokemon(playerEntry.pokemonId),getPokemon(enemyId)]);const moves=await getMoves(pp,playerEntry.level);const enemyLevel=kind==='practice'?Math.max(4,playerEntry.level-1):REWARDS[kind].level;const enemyMoves=await getMoves(ep,enemyLevel);
- const playerMax=maxHp(pp,playerEntry.level),enemyMax=maxHp(ep,enemyLevel);
- battle={kind,turn:1,entryUid:playerEntry.uid,player:pp,enemy:ep,playerMoves:moves,enemyMoves,playerHp:playerMax,playerMax,enemyHp:enemyMax,enemyMax,enemyLevel,partyHP:{[playerEntry.uid]:{hp:playerMax,max:playerMax}},finished:false,busy:false,log:[],status:{player:null,enemy:null},today:save.dailyDate};
- $('#enemyName').textContent=cap(ep.name);$('#enemyLevel').textContent='Lv. '+enemyLevel;$('#playerSprite').src=battleSprite(pp,true);$('#enemySprite').src=battleSprite(ep,false);
- $('#enemySprite').alt=cap(ep.name);$('#playerSprite').alt=cap(pp.name);$('#battlefield').classList.remove('theme-fire','theme-water','theme-night');if(kind==='hard')$('#battlefield').classList.add('theme-night');else if(kind==='medium')$('#battlefield').classList.add('theme-water');else $('#battlefield').classList.add('theme-fire');
- renderBattle();$('#battleLog').textContent='A wild '+cap(ep.name)+' challenges you! Choose a move.';$('#battleControls').querySelectorAll('button').forEach(b=>b.disabled=false);
- }catch(e){console.error(e);$('#battleLog').textContent='Could not load Pokémon battle data. Check your connection and try again.';$('#battleControls').innerHTML='<button class="btn ghost" id="battleRetryHome" style="grid-column:span 3">← BACK TO BASE</button><button class="btn primary" id="battleRetryAgain" style="grid-column:span 3">RETRY BATTLE →</button>';toast('PokéAPI did not respond.')}
+
+// ---------- Boxes ----------
+function filteredBox() {
+  const q = ui.boxSearch.trim().toLowerCase();
+  let list = [...save.box];
+  if (q) list = list.filter(p => { const d = sp(p); return [d.name, p.nickname, ...d.types, p.mark && G.MARKS[p.mark].name, p.shiny && 'shiny', p.nature].join(' ').toLowerCase().includes(q); });
+  const ivt = p => E.STATS.reduce((a, k) => a + p.ivs[k], 0);
+  const sorts = { recent: (a, b) => (b.metAt || '').localeCompare(a.metAt || ''), dex: (a, b) => sp(a).num - sp(b).num, level: (a, b) => b.level - a.level, iv: (a, b) => ivt(b) - ivt(a), shiny: (a, b) => (b.shiny - a.shiny) || (b.mark ? 1 : 0) - (a.mark ? 1 : 0) };
+  return list.sort(sorts[ui.boxSort] || sorts.recent);
 }
-function renderBattle(){if(!battle)return;$('#playerName').textContent=cap(battle.player.name);$('#playerLevel').textContent='Lv. '+rosterEntry(battle.entryUid)?.level;$('#playerHpText').textContent=Math.max(0,battle.playerHp)+' / '+battle.playerMax;$('#enemyHpText').textContent=Math.max(0,battle.enemyHp)+' / '+battle.enemyMax;$('#playerHpBar').style.width=clamp(battle.playerHp/battle.playerMax*100,0,100)+'%';$('#enemyHpBar').style.width=clamp(battle.enemyHp/battle.enemyMax*100,0,100)+'%';$('#playerHpBar').style.background=battle.playerHp/battle.playerMax<.25?'#e86f69':battle.playerHp/battle.playerMax<.5?'#e9be57':'#5bc77b';$('#enemyHpBar').style.background=battle.enemyHp/battle.enemyMax<.25?'#e86f69':battle.enemyHp/battle.enemyMax<.5?'#e9be57':'#5bc77b';$('#battleTurn').textContent='TURN '+String(battle.turn).padStart(2,'0');const entry=rosterEntry(battle.entryUid);$('#battleXpBar').style.width=(entry?Math.min(100,entry.xp/xpNeeded(entry.level)*100):0)+'%';$('#battleControls').querySelectorAll('[data-move]').forEach((b,i)=>{const m=battle.playerMoves[i];b.querySelector('b').textContent=m?.name||'—';b.querySelector('small').textContent=m?(m.type.toUpperCase()+' · '+(m.power?m.power+' PWR':'STATUS')):'—';b.dataset.move=i})}
-function say(line){$('#battleLog').textContent=line}
-function anim(target,cls){if(!save.settings.animations||save.settings.reducedEffects)return;const el=$(target);el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),700)}
-function flash(){if(!save.settings.animations||save.settings.reducedEffects)return;const el=$('#battleFlash');el.classList.remove('active');void el.offsetWidth;el.classList.add('active')}
-function sleep(ms){return new Promise(r=>setTimeout(r,save.settings.reducedEffects?0:ms))}
-async function useMove(index){if(!battle||battle.finished||battle.busy)return;const move=battle.playerMoves[index];if(!move)return;battle.busy=true;disableControls(true);const enemyLeadMove=bestEnemyMove();const playerLevel=rosterEntry(battle.entryUid)?.level||10;const playerPriority=move.priority||0;const enemyPriority=enemyLeadMove.priority||0;let playerFirst=playerPriority>enemyPriority||(playerPriority===enemyPriority&&actualStat(battle.player,playerLevel,'speed')>=actualStat(battle.enemy,battle.enemyLevel,'speed'));if(playerFirst){await executeAttack('player',move);if(!battle.finished&&battle.enemyHp>0)await enemyTurn()}else{await enemyTurn();if(!battle.finished&&battle.playerHp>0)await executeAttack('player',move)}
- if(!battle.finished){battle.turn++;renderBattle();say('What should '+cap(battle.player.name)+' do next?')}battle.busy=false;if(!battle.finished)disableControls(false)}
-function disableControls(val){$('#battleControls').querySelectorAll('button').forEach(b=>b.disabled=val||battle?.finished)}
-function bestEnemyMove(){return battle.enemyMoves.slice().sort((a,b)=>(b.power||0)-(a.power||0))[0]||FALLBACK_MOVES.normal[0]}
-async function executeAttack(side,move){if(!battle||battle.finished)return;const actor=side==='player'?battle.player:battle.enemy;const target=side==='player'?battle.enemy:battle.player;const actorLevel=side==='player'?(rosterEntry(battle.entryUid)?.level||10):battle.enemyLevel;const targetTypes=getTypes(target);const targetHpKey=side==='player'?'enemyHp':'playerHp';const maxKey=side==='player'?'enemyMax':'playerMax';const spriteKey=side==='player'?'#playerSprite':'#enemySprite';const targetSprite=side==='player'?'#enemySprite':'#playerSprite';if(move.category==='status'||!move.power){say(cap(actor.name)+' used '+move.name+'! It prepared for the next exchange.');await sleep(400);if(Math.random()<.23){battle.status[side==='player'?'enemy':'player']='weakened';say('The move disrupted the opponent!')}return}
- if(Math.random()*100> (move.accuracy??100)){say(cap(actor.name)+' used '+move.name+'—but it missed!');await sleep(350);return}
- let eff=typeEffect(move.type,targetTypes);const aStats=statsFrom(actor),tStats=statsFrom(target);const category=move.category||'physical';let attack=actualStat(actor,actorLevel,category==='special'?'special-attack':'attack');let defense=actualStat(target,side==='player'?battle.enemyLevel:(rosterEntry(battle.entryUid)?.level||10),category==='special'?'special-defense':'defense');if(!defense)defense=40;if(battle.status[side==='player'?'player':'enemy']==='weakened')attack*=.75;
- let damage=eff===0?0:Math.max(1,Math.floor((((2*actorLevel/5+2)*Math.max(1,move.power)*attack/Math.max(1,defense))/50+2)*(getTypes(actor).includes(move.type)?1.5:1)*eff*(.85+Math.random()*.15)));
- battle[targetHpKey]=Math.max(0,battle[targetHpKey]-damage);if(targetHpKey==='playerHp'&&battle.partyHP)battle.partyHP[battle.entryUid]={hp:battle.playerHp,max:battle.playerMax};say(cap(actor.name)+' used '+move.name+'! '+(eff===0?'It had no effect…':eff>=2?'It was super effective! ':eff<1?'It was not very effective… ':'')+(damage?'('+damage+' damage)':'') );anim(spriteKey,'attack');await sleep(150);anim(targetSprite,'hit');$('#battlefield').classList.remove('shake');void $('#battlefield').offsetWidth;$('#battlefield').classList.add('shake');flash();renderBattle();await sleep(260);
- if(battle[targetHpKey]<=0){battle[targetHpKey]=0;anim(targetSprite,'faint');await finishBattle(side==='player');return}
- if(move.effectChance&&Math.random()*100<move.effectChance){battle.status[side==='player'?'enemy':'player']='weakened';say(cap(target.name)+' seems weakened!');await sleep(250)}
+function renderBoxes() {
+  if (!ui.sel || !byUid(ui.sel)) ui.sel = save.party[0] || save.box[0]?.uid;
+  const party = partyMons();
+  $('#boxTotals').textContent = save.box.length + ' Pokémon · ' + save.shinyDex.length + ' shiny species';
+  $('#boxParty').innerHTML = party.map(p => `<li><button class="${ui.sel === p.uid ? 'sel' : ''}" data-sel="${esc(p.uid)}"><span><span class="lvpill">Lv. ${p.level}</span> ${genderIcon(p.gender)}<b>${esc(p.nickname || sp(p).name)}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</b></span>${iconOf(sp(p).num, p.shiny)}</button></li>`).join('') + Array.from({ length: 6 - party.length }, () => '<li><div class="empty-slot">Empty</div></li>').join('');
+  const list = filteredBox();
+  const pages = Math.max(1, Math.ceil(list.length / 30));
+  ui.boxPage = Math.min(ui.boxPage, pages - 1);
+  $('#boxName').textContent = 'Box ' + (ui.boxPage + 1) + ' / ' + pages;
+  const slice = list.slice(ui.boxPage * 30, ui.boxPage * 30 + 30);
+  $('#boxGrid').innerHTML = slice.map(p => `<button class="cell ${ui.sel === p.uid ? 'sel' : ''} ${save.party.includes(p.uid) ? 'in-party' : ''}" data-sel="${esc(p.uid)}" aria-label="${esc(sp(p).name)} level ${p.level}${p.shiny ? ', shiny' : ''}">${iconOf(sp(p).num, p.shiny)}${p.shiny ? '<span class="cs shiny-star">✦</span>' : ''}${p.mark ? '<span class="cm"></span>' : ''}</button>`).join('') + Array.from({ length: 30 - slice.length }, () => '<div class="cell"></div>').join('');
+  renderSummary();
 }
-async function enemyTurn(){if(!battle||battle.finished)return;let possible=battle.enemyMoves.filter(m=>m.power>0);const myType=getTypes(battle.player);possible.sort((a,b)=>typeEffect(b.type,myType)*b.power-typeEffect(a.type,myType)*a.power);const move=Math.random()<.75?(possible[0]||bestEnemyMove()):randomChoice(battle.enemyMoves);await executeAttack('enemy',move)}
-async function finishBattle(won){if(!battle||battle.finished)return;battle.finished=true;disableControls(true);save.battles++;const kind=battle.kind;const entry=rosterEntry(battle.entryUid);let coins,xp,ups=0;
- if(kind==='practice'){coins=won?REWARDS.practice.coins:Math.floor(REWARDS.practice.coins/2);xp=won?REWARDS.practice.xp:12;save.practiceCount++}
- else {save.daily[kind]={result:won?'win':'loss',date:save.dailyDate};coins=won?REWARDS[kind].coins:Math.floor(REWARDS[kind].coins*.4);xp=won?REWARDS[kind].xp:Math.floor(REWARDS[kind].xp*.25)}
- if(entry)ups=levelUp(entry,xp);gainCoins(coins);if(won)save.wins++;persist();updateHeader();renderHome();
- const result=won?'VICTORY':'DEFEAT';say(won?cap(battle.enemy.name)+' fainted! You won the battle.':' '+cap(battle.player.name)+' can’t battle anymore! The match is over.');
- await sleep(400);
- $('#battleControls').innerHTML='<button class="btn primary" id="battleDone" style="grid-column:span 3">COLLECT REWARD →</button>';
- $('#battleDone').addEventListener('click',()=>{showModal('<div class="eyebrow">BATTLE COMPLETE / '+esc(kind.toUpperCase())+'</div><h2>'+result+'</h2><p>'+(won?'A clean win. Your rival will remember that.':'A loss is still data. Train up and try again tomorrow.')+'</p><div class="odds-list"><div class="odds-row"><span>COINS EARNED</span><b>+'+coins+' ◈</b></div><div class="odds-row"><span>EXPERIENCE</span><b>+'+xp+' XP</b></div>'+(ups?'<div class="odds-row"><span>LEVEL UP</span><b>LEVEL '+entry.level+'</b></div>':'')+'<div class="odds-row"><span>DAILY BATTLE</span><b>'+(kind==='practice'?'PRACTICE':save.daily[kind]?'CLEARED':'IN PROGRESS')+'</b></div></div><div class="modal-buttons"><button class="btn primary" id="continueHome">BACK TO BASE →</button><button class="btn ghost" id="continueTeam">MY TEAM</button></div>');$('#continueHome').onclick=()=>{closeModal();battle=null;$('#battleControls').innerHTML='';renderHome();pageTo('home')};$('#continueTeam').onclick=()=>{closeModal();battle=null;$('#battleControls').innerHTML='';pageTo('team')}})
+const STAT_LABEL = { hp: 'HP', atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed' };
+function radar(p) {
+  // Hexagon in SV order: HP top, Atk upper-right, Def lower-right, Spe bottom, SpD lower-left, SpA upper-left.
+  const order = ['hp', 'atk', 'def', 'spe', 'spd', 'spa'];
+  const cx = 150, cy = 118, R = 78;
+  const pt = (i, r) => { const a = -Math.PI / 2 + i * Math.PI / 3; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; };
+  const ivs = G.effectiveIvs(p);
+  const poly = r => order.map((_, i) => pt(i, r).join(',')).join(' ');
+  const val = order.map((k, i) => pt(i, 12 + (ivs[k] / 31) * (R - 12)).join(',')).join(' ');
+  const labels = order.map((k, i) => { const [x, y] = pt(i, R + 22); return `<text x="${x}" y="${y - 6}" text-anchor="middle" class="lbl">${STAT_LABEL[k]}</text><text x="${x}" y="${y + 9}" text-anchor="middle">${G.ivJudge(ivs[k])}${p.hyper?.[k] ? ' ★' : ''}</text>`; }).join('');
+  return `<svg class="radar" viewBox="0 0 300 240" role="img" aria-label="IV judge chart"><polygon points="${poly(R)}" fill="rgba(5,30,45,.45)" stroke="rgba(255,255,255,.5)"/><polygon points="${poly(R * .5)}" fill="none" stroke="rgba(255,255,255,.18)"/><polygon points="${val}" fill="rgba(120,220,255,.75)" stroke="#fff" stroke-width="1.5"/>${labels}</svg>`;
 }
-async function usePotion(){if(!battle||battle.finished||battle.busy)return;if(!(save.inventory.potion>0)){toast('No potions left. Visit the shop.');return}if(battle.playerHp>=battle.playerMax){toast('HP is already full.');return}save.inventory.potion--;battle.playerHp=Math.min(battle.playerMax,battle.playerHp+Math.floor(battle.playerMax*.25));if(battle.partyHP)battle.partyHP[battle.entryUid]={hp:battle.playerHp,max:battle.playerMax};persist();renderBattle();say('You used a Potion. '+cap(battle.player.name)+' recovered HP!');battle.busy=true;disableControls(true);await sleep(600);if(!battle.finished)await enemyTurn();if(!battle.finished){battle.turn++;renderBattle();battle.busy=false;disableControls(false)}}
-function showSwitch(){if(!battle||battle.busy||battle.finished)return;const other=save.party.filter(p=>p.uid!==battle.entryUid);if(!other.length){toast('You need another Pokémon in your party first.');return}showModal('<div class="eyebrow">PARTY MANAGEMENT</div><h2>SWITCH POKÉMON</h2><p>Switching uses your turn, so the opponent may attack afterward.</p><div class="odds-list">'+other.map(e=>'<button class="move-btn" style="width:100%" data-switch="'+escAttr(e.uid)+'"><span>⇄</span><b>'+esc(cap(e.name))+'</b><small>LEVEL '+e.level+'</small></button>').join('')+'</div>')}
-async function switchPokemon(uid){closeModal();if(!battle||battle.busy||battle.finished)return;const e=rosterEntry(uid);if(!e)return;battle.busy=true;disableControls(true);try{const p=await getPokemon(e.pokemonId);if(!battle.partyHP)battle.partyHP={};const previous=battle.partyHP[battle.entryUid];if(previous)battle.partyHP[battle.entryUid]={hp:battle.playerHp,max:battle.playerMax};const stored=battle.partyHP[uid];if(stored&&stored.hp<=0){battle.busy=false;disableControls(false);toast(cap(e.name)+' has fainted in this battle.');return}battle.entryUid=uid;battle.player=p;battle.playerMax=stored?.max||maxHp(p,e.level);battle.playerHp=stored?.hp??battle.playerMax;battle.partyHP[uid]={hp:battle.playerHp,max:battle.playerMax};battle.playerMoves=await getMoves(p,e.level);$('#playerSprite').src=battleSprite(p,true);$('#playerSprite').alt=cap(p.name);renderBattle();say('Go, '+cap(p.name)+'!');await sleep(350);await enemyTurn();if(!battle.finished){battle.turn++;renderBattle();battle.busy=false;disableControls(false)}}catch(err){battle.busy=false;disableControls(false);toast('Unable to switch right now.')}}
-const GEN_RANGES={g1:[1,151],g2:[152,251],g3:[252,386],g4:[387,493],g5:[494,649],g6:[650,721],g7:[722,809],g8:[810,905],g9:[906,1025]};
-const RARE_POOL=[6,9,18,34,38,45,59,62,65,68,94,103,130,131,134,142,149,154,157,160,181,196,197,208,212,214,230,248,257,260,282,303,306,334,350,373,376,405,448,464,475,487,493,530,609,635,658,681,700,715,724,738,745,778,791,792,887,889,908,911,920,937,998,1000,1007,1017,1024,1025];
-const LEGENDARY_POOL=[144,145,146,150,151,243,244,245,249,250,251,377,378,379,380,381,382,383,384,385,386,480,481,482,483,484,487,488,489,490,491,492,493,638,639,640,641,642,643,644,645,646,647,648,649,716,717,718,772,773,785,786,787,788,789,790,791,792,800,801,802,807,808,809,888,889,890,891,892,893,894,895,896,897,898,905,1001,1002,1003,1004,1007,1008,1009,1010,1014,1015,1016,1017,1020,1021,1022,1023];
-function packConfig(kind){
- if(kind==='starter')return {label:'STARTER BOX',price:180,odds:[['Starter Pokémon from any generation',100]],pick:()=>randomChoice(STARTERS)};
- if(kind==='basic')return {label:'BASIC BOX',price:120,odds:[['Pokémon from the National Pokédex',100]],pick:()=>1+Math.floor(Math.random()*1025)};
- if(kind==='rare')return {label:'RARE BOX',price:350,odds:[['Evolved / high-stat Pokémon pool',100]],pick:()=>randomChoice(RARE_POOL)};
- if(kind==='master')return {label:'MASTER BOX',price:700,odds:[['Legendary or Mythical pool',40],['Rare / evolved pool',40],['Any National Dex species',20]],pick:()=>{const r=Math.random();return r<.4?randomChoice(LEGENDARY_POOL):r<.8?randomChoice(RARE_POOL):1+Math.floor(Math.random()*1025)}};
- const range=GEN_RANGES[kind];if(range){const names={g1:'KANTO',g2:'JOHTO',g3:'HOENN',g4:'SINNOH',g5:'UNOVA',g6:'KALOS',g7:'ALOLA',g8:'GALAR',g9:'PALDEA'};return {label:names[kind]+' BOX',price:150,odds:[['Pokémon from '+names[kind],100]],pick:()=>range[0]+Math.floor(Math.random()*(range[1]-range[0]+1))}}
- return null
+function renderSummary() {
+  const el = $('#summaryPanel');
+  const p = byUid(ui.sel);
+  if (!p) { el.innerHTML = '<div class="empty">Select a Pokémon.</div>'; return; }
+  const d = sp(p), st = G.statsOf(p);
+  const nat = p.mint || p.nature, [plus, minus] = E.NATURES[nat];
+  const ab = G.gameData.dex && E.data.abilities[p.ability];
+  const prog = G.levelProgress(p);
+  const tabs = { info: 'Info', stats: 'Stats', moves: 'Moves', marks: 'Marks' };
+  let body = '';
+  if (ui.sumTab === 'info') {
+    body = `<dl class="kv"><dt>No.</dt><dd>${String(d.num).padStart(4, '0')} ${esc(d.name)}</dd>
+      <dt>Types</dt><dd>${typeChips(d.types)}</dd><dt>Tera Type</dt><dd>${typeChips([p.teraType])}</dd>
+      <dt>Nature</dt><dd>${cap(p.nature)}${p.mint ? ' (' + cap(p.mint) + ' Mint)' : ''}</dd>
+      <dt>Ability</dt><dd>${esc(ab?.name || p.ability)}${p.abilitySlot === 'H' ? ' <span class="tag">Hidden</span>' : ''}${E.ABILITY_SUPPORT.has(p.ability) ? '' : ' <span class="tag" title="This ability has no effect in battle yet">not simulated</span>'}<br><small class="muted">${esc(ab?.desc || '')}</small></dd>
+      <dt>Held item</dt><dd>${p.item ? pic(G.itemSprite(p.item), [], 'alt="" width="22" height="22"') + ' ' + esc(G.ITEMS[p.item]?.name) : 'None'}</dd>
+      <dt>Exp. points</dt><dd>${fmt(p.exp)}${p.level < 100 ? ' · ' + fmt(prog.need - prog.cur) + ' to next' : ''}<div class="xp-bar"><i style="width:${prog.pct}%"></i></div></dd>
+      <dt>Friendship</dt><dd>${p.friendship}/255</dd><dt>Size</dt><dd>${p.size === 255 ? 'Jumbo (255)' : p.size === 0 ? 'Mini (0)' : p.size + ' / 255'}</dd>
+      <dt>Record</dt><dd>${p.wins || 0} wins · ${p.battles || 0} battles</dd><dt>Met</dt><dd>${new Date(p.metAt).toLocaleDateString()} · ${esc(p.origin)}</dd></dl>`;
+  } else if (ui.sumTab === 'stats') {
+    const ivSum = E.STATS.reduce((a, k) => a + p.ivs[k], 0), evSum = E.STATS.reduce((a, k) => a + p.evs[k], 0);
+    body = radar(p) + `<p style="text-align:center;font-weight:800">${G.ivTotalJudge(ivSum)}</p><table class="stat-table"><tr><th>Stat</th><th>Value</th><th>IV</th><th>EV</th></tr>${E.STATS.map(k => `<tr><td class="${k === plus ? 'plus' : k === minus ? 'minus' : ''}">${STAT_LABEL[k]}${k === plus ? ' ▲' : k === minus ? ' ▼' : ''}</td><td>${st[k]}</td><td>${p.ivs[k]}${p.hyper?.[k] ? '★' : ''}</td><td>${p.evs[k]} <span class="ev-bar"><i style="width:${p.evs[k] / 252 * 100}%"></i></span></td></tr>`).join('')}</table><p class="muted">EVs ${evSum}/510 · Base stat total ${d.bs.reduce((a, b) => a + b, 0)} · ${G.GROWTH_NAMES[d.gr]} growth</p>`;
+  } else if (ui.sumTab === 'moves') {
+    body = `<div class="move-list">${p.moves.map(id => moveRow(id)).join('')}</div><button class="btn teal small" data-act="moves">Change moves</button>`;
+  } else {
+    body = p.marks.length ? `<div class="mark-list">${p.marks.map(m => `<div class="mark-row"><i></i><span>${esc(G.MARKS[m].name)}<br><small class="muted">Title: “${esc(G.MARKS[m].title)}”</small></span>${p.mark === m ? '<span class="tag">Shown</span>' : `<button class="btn small ghost" data-act="showmark" data-mark="${m}">Show title</button>`}</div>`).join('')}${p.mark ? '<button class="btn small ghost" data-act="hidemark">Hide title</button>' : ''}</div>` : '<p class="muted">No marks yet. Marks can appear on any Pokémon you get: rare, personality, time-of-day and weather marks, plus Jumbo/Mini, Partner and Mightiest marks earned in play.</p>';
+  }
+  const inParty = save.party.includes(p.uid);
+  const evos = G.evolutionOptions(p, { inventory: save.inventory, weather: G.dailyWeather(G.todayKey()).id, coins: save.coins });
+  const canEvo = evos.filter(o => o.ok);
+  el.innerHTML = `<div class="sum-head"><span class="ball"></span><span>${esc(p.nickname || d.name)}</span>${genderIcon(p.gender)}${p.shiny ? '<span class="shiny-star">✦</span>' : ''}<span class="lvl">Lv. ${p.level}</span></div>
+    <div class="sum-body"><div class="sum-art">${artOf(d.num, p.shiny, d.name)}${p.mark ? `<span class="mark-banner">${esc(G.displayName(p))}</span>` : ''}</div>
+    <div class="sum-tabs" role="tablist">${Object.entries(tabs).map(([k, v]) => `<button role="tab" data-sumtab="${k}" class="${ui.sumTab === k ? 'on' : ''}" aria-selected="${ui.sumTab === k}">${v}</button>`).join('')}</div>${body}</div>
+    <div class="sum-actions">
+      ${inParty ? (save.party[0] === p.uid ? '' : '<button class="btn small primary" data-act="lead">Make lead</button>') + (save.party.length > 1 ? '<button class="btn small ghost" data-act="unparty">Move to box</button>' : '') : `<button class="btn small primary" data-act="party" ${save.party.length >= 6 ? 'disabled title="Party is full (6)"' : ''}>Add to party</button>`}
+      ${canEvo.length ? `<button class="btn small teal" data-act="evolve">Evolve!</button>` : evos.length ? `<button class="btn small ghost" data-act="evoinfo">Evolution</button>` : ''}
+      <button class="btn small ghost" data-act="item">${p.item ? 'Swap item' : 'Give item'}</button>${p.item ? '<button class="btn small ghost" data-act="take">Take item</button>' : ''}
+      <button class="btn small ghost" data-act="use">Use item</button>
+      <button class="btn small ghost" data-act="showcase">${save.showcase.includes(p.uid) ? 'Unshowcase' : 'Showcase'}</button>
+      <button class="btn small ghost" data-act="nick">Nickname</button>
+      <button class="btn small ghost" data-act="avatar">Set as avatar</button>
+      <button class="btn small danger" data-act="release" ${save.box.length <= 1 ? 'disabled' : ''}>Release</button>
+    </div>`;
 }
-function openPack(kind){const cfg=packConfig(kind);if(!cfg)return;showModal('<div class="eyebrow">SUPPLY DEPOT / MYSTERY PACK</div><h2>'+cfg.label+'</h2><p>Each box gives one Pokémon. Generation boxes stay within their listed generation; the Master Box has a chance at a legendary or mythical species. In-game coins only.</p><div class="odds-list">'+cfg.odds.map(o=>'<div class="odds-row"><span>'+o[0]+'</span><b>'+o[1]+'%</b></div>').join('')+'</div><div class="modal-buttons"><button class="btn primary" id="confirmPack">OPEN FOR '+cfg.price+' ◈</button><button class="btn ghost" id="cancelPack">NOT YET</button></div>');$('#confirmPack').onclick=()=>buyPack(kind,cfg.price,cfg);$('#cancelPack').onclick=closeModal}
-async function buyPack(kind,price,cfg){if(save.coins<price){toast('Not enough coins.');return}if(save.party.length>=6){toast('Party full (6). Release a Pokémon first.');return}save.coins-=price;closeModal();toast('Opening box…');const id=cfg.pick();try{const p=await getPokemon(id);const e=addOwned(p,Math.max(5,Math.floor((chosen()?.level||10)*.75)));if(!save.ownedDex.includes(id))save.ownedDex.push(id);persist();showModal('<div class="eyebrow">BOX OPENED</div><div class="modal-pokemon"><img src="'+escAttr(artwork(p))+'" alt="'+escAttr(p.name)+'"><div><h2>'+esc(cap(p.name))+'</h2><p>New partner added to your collection.</p><div class="types">'+getTypes(p).map(t=>'<span class="type '+t+'">'+t+'</span>').join('')+'</div><p>LEVEL '+e.level+'</p></div></div><div class="modal-buttons"><button class="btn primary" id="packTeam">VIEW TEAM →</button><button class="btn ghost" id="packAgain">BACK TO SHOP</button></div>');$('#packTeam').onclick=()=>{closeModal();pageTo('team')};$('#packAgain').onclick=()=>{closeModal();pageTo('shop')}}catch(e){save.coins+=price;persist();toast('Could not open box; coins were refunded.')} }
-function buyItem(type){const items={potion:{price:35,label:'Potion',desc:'Restores 25% of max HP once during battle.'},candy:{price:60,label:'XP Candy S',desc:'Gives the selected Pokémon 50 XP.'},ball:{price:25,label:'Poké Ball',desc:'A collectible item; capture mechanics are not in this prototype.'}};const it=items[type];if(!it)return;if(save.coins<it.price){toast('Not enough coins.');return}if(type==='candy'){const e=chosen();if(!e){toast('Choose a starter first.');return}const ups=levelUp(e,50);save.coins-=it.price;persist();toast(e.name+' gained 50 XP'+(ups?' and levelled up!':'!'));renderHome();return}
- save.coins-=it.price;save.inventory[type]=(save.inventory[type]||0)+1;persist();toast('Bought '+it.label+'. '+it.desc)}
-function showPokemonDetails(p){const owned=save.party.some(x=>x.pokemonId===p.id);showModal('<div class="eyebrow">FIELD GUIDE / NO. '+String(p.id).padStart(4,'0')+'</div><div class="modal-pokemon"><img src="'+escAttr(artwork(p))+'" alt="'+escAttr(cap(p.name))+'"><div><h2>'+esc(cap(p.name))+'</h2><div class="types">'+getTypes(p).map(t=>'<span class="type '+t+'">'+t+'</span>').join('')+'</div><p>Height '+(p.height/10)+' m · Weight '+(p.weight/10)+' kg</p><p>Base stats '+p.stats.map(s=>cap(s.stat.name)+': '+s.base_stat).join(' · ')+'</p></div></div><div class="modal-buttons">'+(!owned&&save.party.length<6?'<button class="btn primary" id="dexRecruit">RECRUIT FOR 125 ◈</button>':'')+'<button class="btn ghost" id="dexClose">CLOSE</button></div>');$('#dexClose').onclick=closeModal;const b=$('#dexRecruit');if(b)b.onclick=()=>{if(save.coins<125){toast('Not enough coins.');return}if(save.party.length>=6){toast('Party full.');return}save.coins-=125;const e=addOwned(p,10);save.ownedDex=[...new Set([...save.ownedDex,p.id])];persist();closeModal();toast(cap(p.name)+' joined your team!');renderTeam()}}
-async function renderDexCard(ref){const id=Number(ref.url.match(/\/pokemon\/(\d+)\/?$/)?.[1]);const name=ref.name;if(!id)return '';return '<article class="dex-card" data-dex="'+escAttr(name)+'"><img loading="lazy" src="'+SPRITES+'/'+id+'.png" alt="'+escAttr(name)+'" onerror="this.src=\''+SPRITES+'/0.png\'"><small>NO. '+String(id).padStart(4,'0')+'</small><h3>'+esc(cap(name))+'</h3></article>'}
-async function loadDex(reset=false){if(dexBusy)return;dexBusy=true;const target=$('#dexResults');if(reset){dexOffset=0;dexLoaded=[];target.innerHTML='<div class="empty-state">Loading Pokédex…</div>'}
- try{const data=await api('/pokemon?limit=60&offset='+dexOffset);if(reset)target.innerHTML='';dexLoaded.push(...data.results);const cards=await Promise.all(data.results.map(renderDexCard));target.insertAdjacentHTML('beforeend',cards.join(''));dexOffset+=data.results.length;$('#loadMore').classList.toggle('hidden',!data.next);if(reset){const s=$('#dexQuery').value.trim();if(s)target.querySelectorAll('.dex-card').forEach(c=>c.classList.toggle('hidden',!c.dataset.dex.includes(slug(s))))}}
- catch(e){target.innerHTML='<div class="empty-state">PokéAPI is unavailable. Try again in a moment.</div>'}finally{dexBusy=false}}
-async function searchDex(){const q=$('#dexQuery').value.trim().toLowerCase();if(!q){loadDex(true);return}const target=$('#dexResults');target.innerHTML='<div class="empty-state">Searching Pokédex…</div>';try{const p=await getPokemon(q);target.innerHTML='<article class="dex-card" data-dex="'+escAttr(p.name)+'"><img src="'+escAttr(artwork(p))+'" alt="'+escAttr(p.name)+'"><small>NO. '+String(p.id).padStart(4,'0')+'</small><h3>'+esc(cap(p.name))+'</h3></article>'}catch(e){target.innerHTML='<div class="empty-state">No match. Try a species name, form name (for example “deoxys-attack”), or Pokédex number.</div>'}}
-function showRelease(uid){const e=rosterEntry(uid);if(!e)return;showModal('<div class="eyebrow">ROSTER MANAGEMENT</div><h2>RELEASE '+esc(cap(e.name))+'?</h2><p>This removes the Pokémon from your team in this browser. This action cannot be undone.</p><div class="modal-buttons"><button class="btn danger" id="confirmRelease">RELEASE</button><button class="btn ghost" id="cancelRelease">KEEP POKÉMON</button></div>');$('#cancelRelease').onclick=closeModal;$('#confirmRelease').onclick=()=>{save.party=save.party.filter(x=>x.uid!==uid);if(save.selectedId===uid)save.selectedId=save.party[0]?.uid||null;persist();closeModal();renderTeam();updateHomeStarter();toast('Pokémon released.')}}
-function setupListeners(){
- $$('[data-page]').forEach(b=>b.addEventListener('click',()=>pageTo(b.dataset.page)));
- $$('[data-battle]').forEach(b=>b.addEventListener('click',()=>startBattle(b.dataset.battle)));
- $('#quickBattle').addEventListener('click',()=>startBattle('practice'));$('#practiceBtn').addEventListener('click',()=>startBattle('practice'));
- $('#starterGrid')?.addEventListener('click',e=>{const b=e.target.closest('[data-starter]');if(b)setStarter(Number(b.dataset.starter))});
- $('#generationBar').addEventListener('click',e=>{const b=e.target.closest('[data-gen]');if(!b)return;activeStarterGen=Number(b.dataset.gen);renderStarterSelection()});
- $('#onboardStarterGrid').addEventListener('click',e=>{if(e.target.closest('#retryStarters')){renderStarterSelection();return}const b=e.target.closest('[data-pick-starter]');if(b)selectStarter(Number(b.dataset.pickStarter))});
- $('#confirmStarter').addEventListener('click',()=>{if(!selectedStarterId){toast('Pick your first partner first.');return}setStarter(selectedStarterId)});
- $('#rosterGrid').addEventListener('click',e=>{const sel=e.target.closest('[data-select]'),rel=e.target.closest('[data-release]');if(sel){save.selectedId=sel.dataset.select;persist();renderTeam();updateHomeStarter()}if(rel)showRelease(rel.dataset.release)});
- $$('.tab').forEach(t=>t.addEventListener('click',()=>{$$('.tab').forEach(b=>b.classList.toggle('active',b===t));$('#shop-items').classList.toggle('hidden',t.dataset.shop!=='items');$('#shop-packs').classList.toggle('hidden',t.dataset.shop!=='packs')}));
- $('#page-shop').addEventListener('click',e=>{const b=e.target.closest('[data-buy]'),p=e.target.closest('[data-pack]');if(b)buyItem(b.dataset.buy);if(p)openPack(p.dataset.pack)});
- $('#battleControls').addEventListener('click',e=>{if(e.target.closest('#battleRetryHome')){battle=null;$('#battleControls').innerHTML='';pageTo('home');return}if(e.target.closest('#battleRetryAgain')){const kind=$('#battleLabel').textContent.toLowerCase().includes('practice')?'practice':$('#battleLabel').textContent.toLowerCase().split('/').pop().trim();battle=null;startBattle(kind);return}const m=e.target.closest('[data-move]');if(m)useMove(Number(m.dataset.move));if(e.target.closest('#bagBtn'))usePotion();if(e.target.closest('#switchBtn'))showSwitch()});
- $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();const b=e.target.closest('[data-switch]');if(b)switchPokemon(b.dataset.switch)});
- $('#modalClose').addEventListener('click',closeModal);
- $('#leaveBattle').addEventListener('click',()=>{if(!battle)return;showModal('<div class="eyebrow">BATTLE PAUSED</div><h2>FORFEIT THIS MATCH?</h2><p>Leaving counts as a loss and consumes the daily attempt.</p><div class="modal-buttons"><button class="btn danger" id="confirmLeave">FORFEIT</button><button class="btn ghost" id="stayBattle">KEEP BATTLING</button></div>');$('#stayBattle').onclick=closeModal;$('#confirmLeave').onclick=()=>{closeModal();if(battle&&!battle.finished){battle.playerHp=0;finishBattle(false)}}});
- $('#dexSearch').addEventListener('click',searchDex);$('#dexQuery').addEventListener('keydown',e=>{if(e.key==='Enter')searchDex()});$('#loadMore').addEventListener('click',()=>loadDex(false));$('#dexResults').addEventListener('click',async e=>{const c=e.target.closest('[data-dex]');if(!c)return;try{const p=await getPokemon(c.dataset.dex);showPokemonDetails(p)}catch(err){toast('Could not open Pokémon details')}});
- $('#profileBtn').addEventListener('click',()=>pageTo('profile'));
- $('#animationsToggle').addEventListener('change',e=>{save.settings.animations=e.target.checked;persist()});$('#effectsToggle').addEventListener('change',e=>{save.settings.reducedEffects=e.target.checked;document.body.classList.toggle('reduced-effects',e.target.checked);persist()});
- $('#resetSave').addEventListener('click',()=>{showModal('<div class="eyebrow">LOCAL DATA</div><h2>RESET EVERYTHING?</h2><p>This deletes the local save for your team, coins, and collection in this browser.</p><div class="modal-buttons"><button class="btn danger" id="resetConfirm">DELETE LOCAL SAVE</button><button class="btn ghost" id="resetCancel">CANCEL</button></div>');$('#resetCancel').onclick=closeModal;$('#resetConfirm').onclick=()=>{localStorage.removeItem(STORAGE_KEY);save=defaultSave();battle=null;closeModal();persist();renderHome();renderTeam();renderProfile();toast('Local save reset.')}})
+const cap = s => String(s || '').replace(/\b\w/g, c => c.toUpperCase());
+function moveRow(id) {
+  const m = M()[id]; if (!m) return '';
+  const sup = E.moveSupport(id);
+  return `<div class="move-row"><span class="type ${tclass(m.type)}">${esc(m.type)}</span><span><b>${esc(m.name)}</b>${m.champions ? ' <span class="tag" title="Champions balance change">C</span>' : ''}<br><small>${esc(m.desc || '')}${sup === 'partial' ? ' · special effect simplified' : ''}</small></span><small>${m.cat === 'Status' ? 'Status' : (m.bp || '—') + ' BP'} · ${m.acc === true ? '—' : m.acc + '%'} · ${m.pp} PP</small></div>`;
 }
-function init(){checkNewDay();if(save.settings.reducedEffects)document.body.classList.add('reduced-effects');setupListeners();renderHome();renderProfile();if(save.starterChosen){renderTeam();pageTo('home')}else{pageTo('starter')}if(save.starterChosen&&save.starterId&&!save.ownedDex.includes(save.starterId))save.ownedDex.push(save.starterId);persist()}
-init();
-booting=false;
-startFirebaseAuth();
+function summaryAction(act, btn) {
+  const p = byUid(ui.sel); if (!p) return;
+  const d = sp(p);
+  switch (act) {
+    case 'lead': save.party = [p.uid, ...save.party.filter(u => u !== p.uid)]; persist(); renderBoxes(); toast(d.name + ' will lead your team.'); break;
+    case 'unparty': if (save.party.length <= 1) return; save.party = save.party.filter(u => u !== p.uid); persist(); renderBoxes(); break;
+    case 'party': if (save.party.length >= 6) { toast('Your party is full (6).'); return; } save.party.push(p.uid); persist(); renderBoxes(); break;
+    case 'evolve': case 'evoinfo': evolutionMenu(p); break;
+    case 'item': giveItemMenu(p); break;
+    case 'take': save.inventory[p.item] = (save.inventory[p.item] || 0) + 1; toast('Took the ' + G.ITEMS[p.item].name + '.'); p.item = null; persist(); renderBoxes(); break;
+    case 'use': useItemMenu(p); break;
+    case 'showcase':
+      if (save.showcase.includes(p.uid)) save.showcase = save.showcase.filter(u => u !== p.uid);
+      else { if (save.showcase.length >= 3) save.showcase.shift(); save.showcase.push(p.uid); toast(d.name + ' is now on your Trainer Card showcase.'); }
+      persist(); renderSummary(); break;
+    case 'nick':
+      showModal(`<h2 id="modalTitle">Nickname</h2><input id="nickInput" maxlength="12" value="${esc(p.nickname)}" placeholder="${esc(d.name)}" autofocus><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="nickOk">Save</button></div>`);
+      $('#nickOk').onclick = () => { p.nickname = $('#nickInput').value.trim().replace(/[<>]/g, '').slice(0, 12); closeModal(true); persist(); renderBoxes(); };
+      break;
+    case 'avatar': save.avatar = d.num; persist(); toast(d.name + ' is your new avatar.'); break;
+    case 'moves': moveEditor(p); break;
+    case 'showmark': p.mark = btn.dataset.mark; persist(); renderSummary(); break;
+    case 'hidemark': p.mark = null; persist(); renderSummary(); break;
+    case 'release':
+      confirmBox('Release ' + (p.nickname || d.name) + '?', 'This permanently removes ' + esc(G.displayName(p)) + ' (Lv. ' + p.level + (p.shiny ? ', shiny' : '') + ') from your collection.', 'Release', () => {
+        save.box = save.box.filter(x => x.uid !== p.uid);
+        save.party = save.party.filter(u => u !== p.uid);
+        save.showcase = save.showcase.filter(u => u !== p.uid);
+        if (!save.party.length && save.box.length) save.party.push(save.box[0].uid);
+        ui.sel = null; persist(); renderBoxes(); toast('Bye-bye, ' + d.name + '!');
+      }, true);
+      break;
+  }
+}
+function moveEditor(p) {
+  const pool = [...new Set([...G.learnableAt(p.species, p.level), ...p.learned, ...p.moves])].filter(id => M()[id]);
+  const tms = G.tmMoves(p.species).filter(id => !pool.includes(id));
+  let chosen = [...p.moves];
+  const tmPrice = id => 100 + Math.round((M()[id].bp || 40) * 3);
+  const draw = () => {
+    $('#modalContent').innerHTML = `<h2 id="modalTitle">${esc(sp(p).name)}'s moves</h2><p>Choose up to four. Level-up moves up to Lv. ${p.level} are free to relearn; TM moves can be taught for coins.</p>
+      <div class="move-list">${pool.map(id => `<label class="move-row" style="cursor:pointer"><input type="checkbox" data-mv="${id}" ${chosen.includes(id) ? 'checked' : ''} style="min-height:0"> ${moveRow(id).replace(/^<div class="move-row">|<\/div>$/g, '')}</label>`).join('')}</div>
+      ${tms.length ? `<details style="margin-top:12px"><summary class="btn ghost small">Teach a TM (${tms.length} available)</summary><div class="move-list" style="margin-top:8px">${tms.map(id => `<div class="move-row"><span class="type ${tclass(M()[id].type)}">${esc(M()[id].type)}</span><span><b>${esc(M()[id].name)}</b><br><small>${esc(M()[id].desc || '')}</small></span><button class="btn small primary" data-tm="${id}">${tmPrice(id)} ◎</button></div>`).join('')}</div></details>` : ''}
+      <div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="movesOk">Save moves (${chosen.length}/4)</button></div>`;
+    $$('#modalContent [data-mv]').forEach(c => c.onchange = () => {
+      const id = c.dataset.mv;
+      if (c.checked) { if (chosen.length >= 4) { c.checked = false; toast('Unselect a move first (max 4).'); return; } chosen.push(id); } else chosen = chosen.filter(x => x !== id);
+      $('#movesOk').textContent = 'Save moves (' + chosen.length + '/4)';
+    });
+    $$('#modalContent [data-tm]').forEach(b => b.onclick = () => {
+      const id = b.dataset.tm, price = tmPrice(id);
+      if (save.coins < price) { toast('Not enough coins.'); return; }
+      save.coins -= price; p.learned.push(id); pool.push(id); tms.splice(tms.indexOf(id), 1); persist(); toast(sp(p).name + ' can now use ' + M()[id].name + '!'); draw();
+    });
+    $('#movesOk').onclick = () => { if (!chosen.length) { toast('Pick at least one move.'); return; } p.moves = chosen; persist(); closeModal(true); renderSummary(); };
+  };
+  showModal('', { wide: true });
+  draw();
+}
+function evolutionMenu(p) {
+  const opts = G.evolutionOptions(p, { inventory: save.inventory, weather: G.dailyWeather(G.todayKey()).id, coins: save.coins });
+  showModal(`<h2 id="modalTitle">${esc(sp(p).name)} can evolve into…</h2><div class="move-list">${opts.map(o => `<div class="move-row">${iconOf(D()[o.into].num, p.shiny)}<span><b>${esc(o.name)}</b><br><small>${esc(o.need)}</small></span>${o.ok ? `<button class="btn small teal" data-evo="${o.into}">Evolve</button>` : '<span class="tag">Not yet</span>'}</div>`).join('')}</div>`, { wide: true });
+  $$('#modalContent [data-evo]').forEach(b => b.onclick = () => { const o = opts.find(x => x.into === b.dataset.evo); closeModal(true); doEvolve(p, o); });
+}
+function doEvolve(p, o, then) {
+  const fromNum = sp(p).num;
+  preload(img.art(D()[o.into].num, p.shiny));
+  showModal(`<div class="reveal"><div class="stage">${artOf(fromNum, p.shiny)}</div><h2 id="modalTitle">What? ${esc(sp(p).name)} is evolving!</h2></div>`, { locked: true });
+  setTimeout(() => {
+    if (o.consume) { save.inventory[o.consume]--; if (save.inventory[o.consume] <= 0) delete save.inventory[o.consume]; }
+    const r = G.evolve(p, o.into);
+    save.stats.evolutions++;
+    const n = sp(p).num;
+    if (!save.ownedDex.includes(n)) save.ownedDex.push(n);
+    if (p.shiny && !save.shinyDex.includes(n)) save.shinyDex.push(n);
+    afterProgress();
+    showModal(`<div class="reveal ${p.shiny ? 'shiny' : ''}"><div class="stage">${artOf(n, p.shiny)}</div><h2 id="modalTitle">Congratulations!</h2><p>Your ${esc(r.from)} evolved into ${esc(r.to)}!</p><div class="row-btns"><button class="btn primary" data-close autofocus>Great!</button></div></div>`, { onClose: () => { if (activeScreen === 'boxes') renderBoxes(); then?.(); } });
+  }, save.settings.reducedEffects ? 200 : 1800);
+}
+function giveItemMenu(p) {
+  const held = Object.keys(save.inventory).filter(id => G.ITEMS[id]?.hold && save.inventory[id] > 0);
+  if (!held.length) { toast('You have no holdable items. Visit the Shop!'); return; }
+  showModal(`<h2 id="modalTitle">Give an item to ${esc(sp(p).name)}</h2><div class="pick-grid">${held.map(id => `<button data-give="${id}">${pic(G.itemSprite(id), [], 'alt=""')}<span>${esc(G.ITEMS[id].name)}</span><small class="muted">×${save.inventory[id]}</small></button>`).join('')}</div>`, { wide: true });
+  $$('#modalContent [data-give]').forEach(b => b.onclick = () => {
+    const id = b.dataset.give;
+    if (p.item) save.inventory[p.item] = (save.inventory[p.item] || 0) + 1;
+    p.item = id; save.inventory[id]--; if (!save.inventory[id]) delete save.inventory[id];
+    closeModal(true); persist(); renderBoxes(); toast(sp(p).name + ' is now holding ' + G.ITEMS[id].name + '.');
+  });
+}
+function useItemMenu(p) {
+  const usable = Object.keys(save.inventory).filter(id => save.inventory[id] > 0 && isUsableOutside(G.ITEMS[id]));
+  if (!usable.length) { toast('No usable items. Training and evolution items are in the Shop.'); return; }
+  showModal(`<h2 id="modalTitle">Use an item on ${esc(sp(p).name)}</h2><div class="pick-grid">${usable.map(id => `<button data-useon="${id}">${pic(G.itemSprite(id), [], 'alt=""')}<span>${esc(G.ITEMS[id].name)}</span><small class="muted">×${save.inventory[id]}</small></button>`).join('')}</div>`, { wide: true });
+  $$('#modalContent [data-useon]').forEach(b => b.onclick = () => { closeModal(true); applyItem(b.dataset.useon, p); });
+}
+const isUsableOutside = it => it && (it.exp || it.levelUp || it.ev || it.resetEvs || it.hyperOne || it.hyperAll || it.abilityCapsule || it.abilityPatch || it.teraChange || it.mint || it.friendship || it.cat === 'evolution' && !it.hold || it.id === 'linkingcord');
+function consume(id) { save.inventory[id]--; if (save.inventory[id] <= 0) delete save.inventory[id]; }
+function applyItem(id, p) {
+  const it = G.ITEMS[id], d = sp(p), name = p.nickname || d.name;
+  const done = (msg, training = true) => { consume(id); if (training) { save.stats.trainingItems++; bumpDay('trainingItems'); } afterProgress(); toast(msg); if (activeScreen === 'boxes') renderBoxes(); if (activeScreen === 'bag') renderBag(); };
+  if (it.exp || it.levelUp) {
+    if (p.level >= 100) { toast("It won't have any effect."); return; }
+    const amt = it.levelUp ? G.expForLevel(d.gr, p.level + 1) - p.exp : it.exp;
+    const lv = G.gainExp(p, amt);
+    const learned = learnNewMoves(p, lv);
+    p.friendship = Math.min(255, p.friendship + (it.levelUp ? 3 : 1));
+    done(name + (lv.length ? ' grew to Lv. ' + p.level + '!' : ' gained ' + fmt(amt) + ' Exp. Points!') + (learned.length ? ' Learned ' + learned.join(', ') + '!' : ''));
+    const evo = autoEvolutions(p); if (evo.length) setTimeout(() => doEvolve(p, evo[0]), 600);
+    return;
+  }
+  if (it.ev) { const applied = G.addEvs(p, it.ev); if (!Object.keys(applied).length) { toast("It won't have any effect."); return; } return done(name + "'s " + STAT_LABEL[Object.keys(applied)[0]] + ' effort rose!'); }
+  if (it.resetEvs) { if (!E.STATS.some(k => p.evs[k])) { toast("It won't have any effect."); return; } for (const k of E.STATS) p.evs[k] = 0; return done(name + "'s EVs were reset."); }
+  if (it.friendship) { if (p.friendship >= 255) { toast("It won't have any effect."); return; } p.friendship = Math.min(255, p.friendship + it.friendship); if (p.friendship >= 255 && !p.marks.includes('partner')) { p.marks.push('partner'); toast(name + ' earned the Partner Mark!'); } return done(name + ' looks happy! Friendship ' + p.friendship + '/255.', false); }
+  if (it.hyperOne || it.hyperAll) {
+    if (p.level < 50) { toast('Hyper Training needs a Pokémon at level 50 or higher.'); return; }
+    const open = E.STATS.filter(k => p.ivs[k] < 31 && !p.hyper?.[k]);
+    if (!open.length) { toast("It won't have any effect."); return; }
+    if (it.hyperAll) { p.hyper = p.hyper || {}; for (const k of open) p.hyper[k] = true; return done(name + ' was Hyper Trained in every stat!'); }
+    showModal(`<h2 id="modalTitle">Hyper Training</h2><p>Choose a stat to treat as a perfect 31.</p><div class="row-btns" style="justify-content:flex-start">${open.map(k => `<button class="btn ghost" data-ht="${k}">${STAT_LABEL[k]} (${p.ivs[k]})</button>`).join('')}</div>`);
+    $$('#modalContent [data-ht]').forEach(b => b.onclick = () => { p.hyper = p.hyper || {}; p.hyper[b.dataset.ht] = true; closeModal(true); done(name + "'s " + STAT_LABEL[b.dataset.ht] + ' was Hyper Trained!'); });
+    return;
+  }
+  if (it.abilityCapsule) { if (!d.ab['1'] || p.abilitySlot === 'H') { toast("It won't have any effect."); return; } p.abilitySlot = p.abilitySlot === '0' ? '1' : '0'; p.ability = E.toId(d.ab[p.abilitySlot]); return done(name + "'s Ability became " + d.ab[p.abilitySlot] + '!'); }
+  if (it.abilityPatch) { if (!d.ab.H || p.abilitySlot === 'H') { toast("It won't have any effect."); return; } p.abilitySlot = 'H'; p.ability = E.toId(d.ab.H); return done(name + "'s Ability became " + d.ab.H + '!'); }
+  if (it.mint) { if ((p.mint || p.nature) === it.mint) { toast("It won't have any effect."); return; } p.mint = it.mint === p.nature ? null : it.mint; return done(name + "'s stats may grow differently now!"); }
+  if (it.teraChange) {
+    showModal(`<h2 id="modalTitle">Choose a Tera Type</h2><div class="types" style="gap:8px">${E.TYPES.filter(t => t !== p.teraType).map(t => `<button class="type ${tclass(t)}" data-tera="${t}" style="border:0;cursor:pointer;padding:6px 12px 6px 4px">${t}</button>`).join('')}</div>`);
+    $$('#modalContent [data-tera]').forEach(b => b.onclick = () => { p.teraType = b.dataset.tera; closeModal(true); done(name + "'s Tera Type is now " + p.teraType + '!'); });
+    return;
+  }
+  if (it.cat === 'evolution' || id === 'linkingcord') {
+    const o = G.evolutionOptions(p, { inventory: save.inventory, coins: save.coins }).find(x => x.ok && x.consume === id);
+    if (!o) { toast("It won't have any effect."); return; }
+    doEvolve(p, o, () => { if (activeScreen === 'bag') renderBag(); });
+    return;
+  }
+  toast("It won't have any effect.");
+}
+
+// ---------- Shop ----------
+const SHOP_CATS = { boxes: ['Pokémon boxes', 'poke-ball'], medicine: ['Medicine', 'potion'], training: ['Training', 'exp-candy-m'], held: ['Held items', 'leftovers'], evolution: ['Evolution', 'fire-stone'], key: ['Key items', 'shiny-charm'] };
+function shopEntries(cat) {
+  if (cat === 'boxes') return Object.keys(G.BOXES).map(k => ({ id: 'box:' + k, box: k, name: G.BOXES[k].name, price: G.BOXES[k].price }));
+  return Object.values(G.ITEMS).filter(i => i.cat === cat && !i.notForSale).map(i => ({ id: i.id, name: i.name, price: i.price }));
+}
+function renderShop() {
+  $('#shopCats').innerHTML = Object.entries(SHOP_CATS).map(([k, [n, s]]) => `<button role="tab" class="bag-cat ${ui.shopCat === k ? 'on' : ''}" data-shopcat="${k}" aria-selected="${ui.shopCat === k}">${pic(SPR + '/items/' + s + '.png', [], 'alt=""')}${n}</button>`).join('');
+  const list = shopEntries(ui.shopCat);
+  if (!list.find(x => x.id === ui.shopSel)) ui.shopSel = list[0]?.id;
+  $('#shopList').innerHTML = list.map(x => {
+    const owned = x.box ? '' : (G.ITEMS[x.id].key ? (save.keyItems[x.id] ? 'Owned' : '') : save.inventory[x.id] ? '×' + save.inventory[x.id] : '');
+    const ico = x.box ? iconOf(x.box === 'outbreak' ? D()[G.dailyOutbreak(G.todayKey())].num : G.BOXES[x.box].art, false) : pic(G.itemSprite(x.id), [SPR + '/items/poke-ball.png'], 'alt=""');
+    return `<li><button class="bag-row ${ui.shopSel === x.id ? 'on' : ''}" data-shopsel="${x.id}" role="option" aria-selected="${ui.shopSel === x.id}">${ico}<span>${esc(x.name)} <span class="owned">${owned}</span></span><span class="qty">${fmt(x.price)} ◎</span></button></li>`;
+  }).join('');
+  renderShopDetail();
+  updateHud();
+}
+function renderShopDetail() {
+  const el = $('#shopDetail');
+  const id = ui.shopSel;
+  if (!id) { el.innerHTML = ''; return; }
+  if (id.startsWith('box:')) {
+    const k = id.slice(4), bx = G.BOXES[k];
+    const key = G.todayKey();
+    const ob = k === 'outbreak' ? D()[G.dailyOutbreak(key)] : null;
+    const left = k === 'outbreak' ? Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0)) : null;
+    const shiny = k === 'outbreak' ? '1/64' : '1/256';
+    el.innerHTML = `<div class="art">${artOf(ob ? ob.num : bx.art, false).replace('<img', '<img class="hd"')}</div><h3>${esc(bx.name)}</h3><p>${esc(bx.desc)}${ob ? ' Today: <b>' + esc(ob.name) + '</b>.' : ''}</p>
+      <div class="odds">${bx.odds.map(o => `<div class="odds-row"><span>${esc(o[0])}</span><b>${o[1]}%</b></div>`).join('')}
+      <div class="odds-row"><span>Shiny chance${save.keyItems.shinycharm ? ' (Shiny Charm ×3)' : ''}</span><b>${save.keyItems.shinycharm ? (k === 'outbreak' ? '3/64' : '3/256') : shiny}</b></div>
+      <div class="odds-row"><span>Any mark (approx.)</span><b>~${save.keyItems.markcharm ? '20' : '7'}%</b></div>
+      <div class="odds-row"><span>Hidden Ability</span><b>5%</b></div>${bx.perfectIvs ? `<div class="odds-row"><span>Guaranteed perfect IVs</span><b>${bx.perfectIvs}+</b></div>` : ''}</div>
+      <p class="muted">Pokémon arrive at Lv. ${G.boxLevel(k, topLevel())} (scales with your party). Legendaries always have 3 perfect IVs.</p>
+      <div class="price-row"><span class="price"><i class="ico-coin"></i>${fmt(bx.price)}</span>${left !== null ? `<span class="tag">${left}/5 left today</span>` : ''}<button class="btn primary" data-box="${k}" ${save.coins < bx.price || left === 0 ? 'disabled' : ''}>${save.coins < bx.price ? 'Not enough coins' : 'Open box'}</button></div>`;
+    return;
+  }
+  const it = G.ITEMS[id];
+  const own = it.key ? (save.keyItems[id] ? 1 : 0) : (save.inventory[id] || 0);
+  const qty = it.key ? 1 : ui.shopQty;
+  const total = it.price * qty;
+  el.innerHTML = `<div class="art">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}</div><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>
+    ${it.hold ? '<p class="muted">Hold item · give it to a Pokémon from Boxes. Held items return to the Bag when taken.</p>' : ''}${it.battle ? '<p class="muted">Use it from the Bag during battle.</p>' : ''}
+    <p class="muted">In Bag: ${it.key ? (own ? 'Owned' : 'Not owned') : own}</p>
+    <div class="price-row"><span class="price"><i class="ico-coin"></i>${fmt(total)}</span>${it.key ? '' : `<span class="qty-step"><button data-qty="-1" aria-label="Decrease quantity">−</button><span>${qty}</span><button data-qty="1" aria-label="Increase quantity">+</button></span>`}
+    <button class="btn primary" data-buy="${id}" ${save.coins < total || (it.key && own) ? 'disabled' : ''}>${it.key && own ? 'Owned' : save.coins < total ? 'Not enough coins' : 'Buy'}</button></div>`;
+}
+function buyItem(id) {
+  const it = G.ITEMS[id]; if (!it) return;
+  const qty = it.key ? 1 : ui.shopQty, total = it.price * qty;
+  if (save.coins < total) { toast('Not enough coins.'); return; }
+  if (it.key) { if (save.keyItems[id]) return; save.keyItems[id] = true; }
+  else save.inventory[id] = (save.inventory[id] || 0) + qty;
+  save.coins -= total;
+  afterProgress(); renderShop();
+  toast('Bought ' + (qty > 1 ? qty + '× ' : '') + it.name + '!');
+}
+
+// ---------- Boxes (lootboxes) ----------
+function markCtx() { return { date: new Date(), weatherMark: G.dailyWeather(G.todayKey()).mark, markCharm: !!save.keyItems.markcharm, createdAt: save.createdAt }; }
+function openBox(kind, free) {
+  const bx = G.BOXES[kind]; if (!bx) return;
+  const key = G.todayKey();
+  if (kind === 'outbreak') { if (save.outbreak.date !== key) save.outbreak = { date: key, opened: 0 }; if (save.outbreak.opened >= 5) { toast('Today\'s outbreak boxes are sold out. Come back tomorrow!'); return; } }
+  if (!free && save.coins < bx.price) { toast('Not enough coins.'); return; }
+  if (!free) save.coins -= bx.price;
+  if (kind === 'outbreak') save.outbreak.opened++;
+  const rng = E.makeRng(Math.floor(Math.random() * 2 ** 32));
+  const { species } = G.rollBox(kind, rng, { outbreak: G.dailyOutbreak(key) });
+  const base = kind === 'outbreak' ? 1 / 64 : G.SHINY_BASE;
+  const p = G.generatePokemon(species, G.boxLevel(kind, topLevel()), { rng, origin: bx.name, shinyRate: base * (save.keyItems.shinycharm ? 3 : 1), perfectIvs: bx.perfectIvs, markContext: markCtx() });
+  addToCollection(p);
+  save.stats.boxesOpened++; bumpDay('boxesOpened');
+  afterProgress();
+  if (activeScreen === 'shop') renderShop(); if (activeScreen === 'home') renderHome();
+  revealModal(p, { again: free ? null : kind });
+}
+function revealModal(p, { title, subtitle, again } = {}) {
+  const d = sp(p);
+  const ivSum = E.STATS.reduce((a, k) => a + p.ivs[k], 0);
+  const perfect = E.STATS.filter(k => p.ivs[k] === 31).length;
+  preload(img.art(d.num, p.shiny));
+  showModal(`<div class="reveal"><div class="stage"><div class="crate"></div></div><h2 id="modalTitle">Opening…</h2></div>`, { locked: true });
+  const finish = () => {
+    const sparkles = p.shiny ? Array.from({ length: 6 }, (_, i) => `<span class="sparkle" style="left:${10 + i * 15}%;top:${(i * 37) % 80}%;animation-delay:${i * .15}s">✦</span>`).join('') : '';
+    showModal(`<div class="reveal ${p.shiny ? 'shiny' : ''}"><div class="stage">${sparkles}${artOf(d.num, p.shiny, d.name)}</div>
+      <h2 id="modalTitle">${esc(title || (p.shiny ? 'A shiny ' + d.name + '!' : 'You got ' + d.name + '!'))}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
+      ${typeChips(d.types)}
+      <div class="badges">${p.shiny ? '<span class="badge-chip gold">✦ Shiny</span>' : ''}${p.mark ? `<span class="badge-chip pink">${esc(G.MARKS[p.mark].name)} · “${esc(G.MARKS[p.mark].title)}”</span>` : ''}${p.abilitySlot === 'H' ? '<span class="badge-chip gold">Hidden Ability</span>' : ''}${perfect ? `<span class="badge-chip">${perfect}× Best IV</span>` : ''}
+      <span class="badge-chip">Lv. ${p.level}</span><span class="badge-chip">${cap(p.nature)} nature</span><span class="badge-chip">Tera ${p.teraType}</span><span class="badge-chip">${esc(E.data.abilities[p.ability]?.name || p.ability)}</span>${p.size === 255 ? '<span class="badge-chip">Jumbo size</span>' : p.size === 0 ? '<span class="badge-chip">Mini size</span>' : ''}</div>
+      <p class="muted">${G.ivTotalJudge(ivSum)} ${save.party.includes(p.uid) ? 'Added to your party.' : 'Sent to your Boxes.'}</p>
+      <div class="row-btns" style="justify-content:center"><button class="btn ghost" id="revealBoxes">View in Boxes</button>${again ? `<button class="btn ghost" id="revealAgain" ${save.coins < G.BOXES[again].price ? 'disabled' : ''}>Open another (${G.BOXES[again].price})</button>` : ''}<button class="btn primary" data-close autofocus>Continue</button></div></div>`);
+    $('#revealBoxes').onclick = () => { closeModal(true); ui.sel = p.uid; go('boxes'); };
+    const ag = $('#revealAgain'); if (ag) ag.onclick = () => { closeModal(true); openBox(again); };
+  };
+  setTimeout(finish, save.settings.reducedEffects ? 150 : 1100);
+}
+
+// ---------- Bag ----------
+const BAG_CATS = { medicine: 'Medicine', training: 'Training', held: 'Held items', evolution: 'Evolution', key: 'Key items', collectible: 'Other' };
+function renderBag() {
+  $('#bagCats').innerHTML = Object.entries(BAG_CATS).map(([k, n]) => `<button role="tab" class="bag-cat ${ui.bagCat === k ? 'on' : ''}" data-bagcat="${k}" aria-selected="${ui.bagCat === k}">${n}</button>`).join('');
+  const ids = ui.bagCat === 'key' ? Object.keys(save.keyItems).filter(k => save.keyItems[k] && G.ITEMS[k]) : Object.keys(save.inventory).filter(id => G.ITEMS[id]?.cat === ui.bagCat && save.inventory[id] > 0);
+  if (!ids.includes(ui.bagSel)) ui.bagSel = ids[0];
+  $('#bagList').innerHTML = ids.length ? ids.map(id => `<li><button class="bag-row ${ui.bagSel === id ? 'on' : ''}" data-bagsel="${id}" role="option" aria-selected="${ui.bagSel === id}">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}<span>${esc(G.ITEMS[id].name)}</span><span class="qty">${ui.bagCat === 'key' ? '' : '×' + save.inventory[id]}</span></button></li>`).join('') : '<li class="empty">Nothing here yet. <button class="btn small primary" data-go="shop">Visit the Shop</button></li>';
+  const id = ui.bagSel, it = G.ITEMS[id];
+  $('#bagDetail').innerHTML = it ? `<div class="art">${pic(G.itemSprite(id), [SPR + '/items/poke-ball.png'], 'alt=""')}</div><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>
+    <div class="row-btns">${isUsableOutside(it) ? '<button class="btn primary" data-baguse>Use</button>' : ''}${it.hold ? '<button class="btn ghost" data-baggive>Give to a Pokémon</button>' : ''}${it.battle ? '<span class="tag">Usable in battle</span>' : ''}${it.key ? '<span class="tag">Always active</span>' : ''}</div>` : '';
+  updateHud();
+}
+
+// ---------- Pokédex ----------
+function dexList() {
+  const q = ($('#dexQuery').value || '').trim().toLowerCase(), f = $('#dexFilter').value, g = +$('#dexGen').value;
+  return Object.entries(D()).sort((a, b) => a[1].num - b[1].num).filter(([, d]) => {
+    if (g && d.gen !== g) return false;
+    if (f === 'owned' && !save.ownedDex.includes(d.num)) return false;
+    if (f === 'missing' && save.ownedDex.includes(d.num)) return false;
+    if (f === 'shiny' && !save.shinyDex.includes(d.num)) return false;
+    if (!q) return true;
+    return d.name.toLowerCase().includes(q) || String(d.num) === q.replace(/^0+/, '') || d.types.some(t => t.toLowerCase() === q);
+  });
+}
+function renderDex() {
+  if ($('#dexGen').options.length === 1) $('#dexGen').insertAdjacentHTML('beforeend', [1, 2, 3, 4, 5, 6, 7, 8, 9].map(g => `<option value="${g}">Gen ${g} · ${G.REGIONS['g' + g]}</option>`).join(''));
+  $('#dexTotals').textContent = save.ownedDex.length + ' owned · ' + save.shinyDex.length + ' shiny';
+  const list = dexList();
+  $('#dexResults').innerHTML = list.slice(0, ui.dexShown).map(([id, d]) => {
+    const own = save.ownedDex.includes(d.num), sh = save.shinyDex.includes(d.num);
+    return `<button class="dex-card ${own ? '' : 'unowned'}" data-dex="${id}">${sh ? '<span class="badge shiny-star">✦</span>' : own ? '<span class="badge">●</span>' : ''}${iconOf(d.num, false, d.name)}<small>No. ${String(d.num).padStart(4, '0')}</small><b>${esc(d.name)}</b></button>`;
+  }).join('') || '<div class="empty">No Pokémon match. Try a name, number or type.</div>';
+  $('#loadMore').classList.toggle('hidden', list.length <= ui.dexShown);
+}
+function baseStatBars(d) { return E.STATS.map((k, i) => `<div><span>${STAT_LABEL[k]}</span><b>${d.bs[i]}</b><i style="width:${Math.min(100, d.bs[i] / 200 * 100)}%"></i></div>`).join(''); }
+async function showDexEntry(id) {
+  const d = D()[id]; if (!d) return;
+  const own = save.ownedDex.includes(d.num), sh = save.shinyDex.includes(d.num);
+  const chain = []; let root = id; while (D()[root].prevo && D()[D()[root].prevo]) root = D()[root].prevo;
+  const walk = (x, depth) => { chain.push(x); for (const e of D()[x].evos || []) walk(e, depth + 1); }; walk(root, 0);
+  const ls = G.levelUpMoves(id).filter(m => M()[m.id]);
+  showModal(`<div class="eyebrow">No. ${String(d.num).padStart(4, '0')} · Gen ${d.gen}</div><h2 id="modalTitle">${esc(d.name)} ${sh ? '<span class="shiny-star">✦</span>' : ''}</h2>
+    <div style="display:grid;grid-template-columns:minmax(0,200px) 1fr;gap:16px;align-items:start"><div>${artOf(d.num, sh)}</div><div style="display:grid;gap:10px">${typeChips(d.types)}
+    <p id="dexFlavor" class="muted">Loading Pokédex entry…</p>
+    <dl class="kv"><dt>Abilities</dt><dd>${Object.entries(d.ab).map(([k, a]) => `<span title="${esc(E.data.abilities[E.toId(a)]?.desc || '')}">${esc(a)}${k === 'H' ? ' (H)' : ''}</span>`).join(', ')}</dd><dt>Height / weight</dt><dd>${d.ht} m · ${d.wt} kg</dd><dt>EV yield</dt><dd>${E.STATS.filter((k, i) => d.ey[i]).map(k => d.ey[E.STATS.indexOf(k)] + ' ' + STAT_LABEL[k]).join(', ')}</dd><dt>Growth</dt><dd>${G.GROWTH_NAMES[d.gr]}</dd><dt>Status</dt><dd>${own ? 'Owned' : 'Not owned yet'}</dd></dl></div></div>
+    <h3 style="margin:14px 0 6px">Base stats</h3><div class="base-stats">${baseStatBars(d)}</div>
+    ${chain.length > 1 ? `<h3 style="margin:14px 0 6px">Evolution</h3><div class="evo-chain">${chain.map(x => `<button data-dexjump="${x}">${iconOf(D()[x].num, false)}<span>${esc(D()[x].name)}</span>${D()[x].evoLevel ? `<small class="muted">Lv. ${D()[x].evoLevel}</small>` : D()[x].evoItem ? `<small class="muted">${esc(D()[x].evoItem)}</small>` : ''}</button>`).join('')}</div>` : ''}
+    <details style="margin-top:12px"><summary class="btn ghost small">Level-up moves (${ls.length})</summary><div class="move-list" style="margin-top:8px">${ls.map(m => `<div class="move-row"><small>Lv. ${m.level}</small>${moveRow(m.id).replace(/^<div class="move-row">|<\/div>$/g, '')}</div>`).join('')}</div></details>`, { wide: true });
+  $$('#modalContent [data-dexjump]').forEach(b => b.onclick = () => showDexEntry(b.dataset.dexjump));
+  try {
+    const res = await fetch(API + '/pokemon-species/' + d.num);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const genus = data.genera?.find(g => g.language.name === 'en')?.genus || '';
+    const flav = [...(data.flavor_text_entries || [])].reverse().find(f => f.language.name === 'en')?.flavor_text?.replace(/[\f\n­]/g, ' ') || '';
+    const el = $('#dexFlavor'); if (el) el.textContent = (genus ? genus + '. ' : '') + flav;
+  } catch (e) { const el = $('#dexFlavor'); if (el) el.textContent = 'Pokédex text could not be loaded (PokéAPI unreachable). Stats above are stored offline.'; }
+}
+
+// ---------- Trainer card / medals / options ----------
+function renderProfile() {
+  const score = G.trainerScore(save);
+  const show = save.showcase.map(byUid).filter(Boolean);
+  $('#trainerCard').innerHTML = `<div class="tc-head">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2><button class="btn small ghost" id="renameTrainer">Edit name</button></div></div>
+    <div class="tc-stats"><div><small>Trainer score</small><b>${fmt(score)}</b></div><div><small>Wins</small><b>${fmt(save.wins)}</b></div><div><small>Battles</small><b>${fmt(save.battles)}</b></div><div><small>Pokédex</small><b>${save.ownedDex.length}</b></div><div><small>Shiny species</small><b>${save.shinyDex.length}</b></div><div><small>Best streak</small><b>${save.checkin.best || 0} days</b></div><div><small>Daily sweeps</small><b>${save.stats.dailySweeps}</b></div><div><small>Medals</small><b>${Object.keys(save.medals).length}/${G.MEDALS.length}</b></div></div>
+    <div class="section-title"><h2>Showcase</h2><span class="muted">Shown on leaderboards</span></div>
+    <div class="showcase-slots">${[0, 1, 2].map(i => { const p = show[i]; return p ? `<button class="showcase-slot filled" data-showslot="${i}">${artOf(sp(p).num, p.shiny)}<b>${esc(G.displayName(p))}${p.shiny ? ' <span class="shiny-star">✦</span>' : ''}</b><small>Lv. ${p.level} · ${E.STATS.filter(k => p.ivs[k] === 31).length}× Best IV</small></button>` : `<button class="showcase-slot" data-showslot="${i}"><span class="muted">+ Add a Pokémon</span></button>`; }).join('')}</div>
+    <div class="row-btns"><button class="btn ghost" id="shareCard">Copy trainer card text</button></div>`;
+  $('#animationsToggle').checked = !!save.settings.animations;
+  $('#effectsToggle').checked = !!save.settings.reducedEffects;
+  $('#damageToggle').checked = save.settings.showDamage !== false;
+  $('#speedSelect').value = String(save.settings.battleSpeed || 1);
+  renderAuthState();
+}
+function renderMedals() {
+  $('#medalCount').textContent = Object.keys(save.medals).length + ' / ' + G.MEDALS.length;
+  $('#medalGrid').innerHTML = G.MEDALS.map(m => `<div class="medal ${save.medals[m.id] ? '' : 'locked'}"><i aria-hidden="true"></i><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small><small>${save.medals[m.id] ? 'Earned ' + save.medals[m.id] : 'Reward: ' + m.reward + ' coins'}</small></span></div>`).join('');
+}
+
+// ---------- Export / import ----------
+function exportPayload() { return { app: 'PokeDuel', kind: 'save', exportVersion: 1, exportedAt: new Date().toISOString(), save }; }
+function exportFile() {
+  const blob = new Blob([JSON.stringify(exportPayload(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'pokeduel-save-' + G.todayKey() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('Save exported.');
+}
+const toCode = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+const fromCode = s => JSON.parse(decodeURIComponent(escape(atob(s.trim()))));
+async function copyCode() {
+  const code = toCode(exportPayload());
+  try { await navigator.clipboard.writeText(code); toast('Save code copied to clipboard.'); }
+  catch (e) { showModal(`<h2 id="modalTitle">Your save code</h2><p>Copy this text and keep it somewhere safe.</p><textarea readonly>${esc(code)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`); }
+}
+function parseImport(text) {
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { try { obj = fromCode(text); } catch (e2) { throw new Error('This isn\'t a PokeDuel save file or code.'); } }
+  const raw = obj?.app === 'PokeDuel' ? obj.save : obj;
+  const s = G.migrateSave(raw);
+  if (!s) throw new Error('This save is from an unsupported version.');
+  return s;
+}
+function previewImport(text) {
+  let s;
+  try { s = parseImport(text); } catch (e) { showModal(`<h2 id="modalTitle">Import failed</h2><p>${esc(e.message)}</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
+  confirmBox('Import this save?', `<b>${esc(s.trainerName || 'Trainer')}</b> · ${s.box.length} Pokémon · ${s.ownedDex.length} species · ${fmt(s.coins)} coins · last played ${s.lastActive ? new Date(s.lastActive).toLocaleString() : 'unknown'}.<br><br>This replaces the save in this browser${currentUser ? ' and your cloud save' : ''}. A backup of your current save is kept in this browser.`, 'Import save', () => {
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(save)); } catch (e) {}
+    save = s; afterProgress(); afterSaveReplaced(); toast('Save imported!');
+  }, true);
+}
+function afterSaveReplaced() {
+  checkNewDay();
+  document.body.classList.toggle('reduced-effects', !!save.settings.reducedEffects);
+  ui.sel = null;
+  go(save.starterChosen ? (activeScreen === 'starter' ? 'home' : activeScreen === 'battle' ? 'home' : activeScreen) : 'starter', { noHash: true });
+  updateHud();
+}
+
+// ---------- Battle ----------
+let battleState = null;
+function buildPlayerTeam() {
+  return partyMons().map(p => ({ uid: p.uid, species: p.species, level: p.level, nickname: p.nickname, moves: p.moves, ability: p.ability, item: p.item, nature: p.mint || p.nature, ivs: G.effectiveIvs(p), evs: p.evs, teraType: p.teraType, gender: p.gender, shiny: p.shiny, friendship: p.friendship }));
+}
+function startBattle(tier) {
+  if (!save.starterChosen || !partyMons().length) { toast('Choose a starter first.'); return; }
+  checkNewDay();
+  if (tier !== 'practice' && save.daily[tier]) { toast('You already took on this daily battle today.'); return; }
+  const begin = () => {
+    const key = G.todayKey();
+    const trainer = G.buildTrainer(tier, key, topLevel());
+    const seed = tier === 'practice' ? Date.now() : E.hashString(key + ':' + tier + ':battle');
+    const b = E.createBattle({ player: { name: trainerName(), team: buildPlayerTeam() }, enemy: { name: trainer.name, team: trainer.team }, seed, ai: G.DAILY_TIERS[tier].ai, label: trainer.name });
+    if (tier !== 'practice') { save.daily[tier] = { result: 'pending', date: key }; persist(); }
+    battleState = { b, tier, trainer, ui: { p: null, e: null }, tera: false, menu: 'main', playing: false, ko: [], startedTurn: 1, itemsUsed: 0 };
+    const arena = $('#battlefield');
+    arena.className = 'arena theme-' + tier;
+    const bg = assets.backgrounds['battle-' + tier];
+    arena.style.setProperty('--arena-bg', bg ? `url("assets/backgrounds/${bg}")` : 'none');
+    $('#battleLabel').textContent = tier === 'practice' ? 'Practice' : 'Daily · ' + G.DAILY_TIERS[tier].name;
+    $('#battleLog').textContent = '';
+    $('#battleControls').innerHTML = '';
+    $('#playerSprite').className = 'battle-sprite mine gone'; $('#enemySprite').className = 'battle-sprite foe gone';
+    go('battle');
+    const intro = b.events.slice(0);
+    intro.unshift({ t: 'msg', text: (tier === 'practice' ? 'Practice Partner' : trainer.name) + ' would like to battle!' });
+    playEvents(intro).then(renderCommands);
+  };
+  if (tier === 'practice') begin();
+  else confirmBox('Daily battle · ' + G.DAILY_TIERS[tier].name, `You get <b>one attempt</b> per day. Leaving or reloading during the battle counts as a loss. Your party of ${partyMons().length} will battle ${G.DAILY_TIERS[tier].size} Pokémon.`, 'Battle!', begin);
+}
+function monView(side) { return E.active(battleState.b, side); }
+function renderStatusCard(side) {
+  const s = battleState.ui[side]; if (!s) return;
+  const mon = monView(side);
+  const pct = Math.max(0, s.hp / s.maxhp * 100);
+  const boosts = Object.entries(mon?.boosts || {}).filter(([, v]) => v).map(([k, v]) => `<span class="${v > 0 ? 'up' : 'down'}">${({ atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe', accuracy: 'Acc', evasion: 'Eva' })[k]} ${v > 0 ? '+' : ''}${v}</span>`).join('');
+  const vol = mon ? ['confusion', 'leechseed', 'substitute', 'taunt', 'encore'].filter(v => mon.volatiles[v]).map(v => `<span>${({ confusion: 'Confused', leechseed: 'Seeded', substitute: 'Substitute', taunt: 'Taunted', encore: 'Encore' })[v]}</span>`).join('') : '';
+  $(side === 'p' ? '#playerCard' : '#foeCard').innerHTML = `<div class="sc-top">${s.tera ? `<span class="sc-tera" title="Terastallized: ${esc(s.tera)}"></span>` : ''}<b>${esc(s.name)}</b>${genderIcon(s.gender)}${s.status ? `<span class="status-chip st-${s.status}">${s.status.toUpperCase()}</span>` : ''}<span class="lvl">Lv. ${s.level}</span></div>
+    <div class="hp"><span class="hp-label">HP</span><span class="hp-bar"><i class="${hpCls(pct)}" style="width:${pct}%"></i></span></div>
+    ${side === 'p' ? `<div class="sc-hpnum">${Math.max(0, s.hp)} / ${s.maxhp}</div>` : ''}<div class="sc-boosts">${boosts}${vol}${s.tera ? `<span class="type ${tclass(s.tera)}">${esc(s.tera)}</span>` : ''}</div>`;
+}
+function renderFoeTeam() {
+  const team = battleState.b.sides.e.team;
+  $('#foeTeam').innerHTML = team.map(m => `<i class="${m.fainted ? 'out' : ''}" title="${m.fainted ? 'Fainted' : 'Able to battle'}"></i>`).join('');
+}
+function renderFieldChips() {
+  const b = battleState.b, f = b.field, out = [];
+  const w = { RainDance: '☂ Rain', sunnyday: '☀ Harsh sun', Sandstorm: '≋ Sandstorm', snowscape: '❄ Snow', hail: '❄ Hail' }[f.weather];
+  if (w) out.push(w);
+  if (f.terrain) out.push({ electricterrain: 'Electric Terrain', grassyterrain: 'Grassy Terrain', psychicterrain: 'Psychic Terrain', mistyterrain: 'Misty Terrain' }[f.terrain]);
+  if (f.trickRoom) out.push('Trick Room');
+  for (const [sid, label] of [['p', 'Your side'], ['e', 'Foe side']]) {
+    const c = b.sides[sid].cond;
+    const names = Object.keys(c).map(k => ({ stealthrock: 'Stealth Rock', spikes: 'Spikes ×' + (c[k].layers || 1), toxicspikes: 'Toxic Spikes', stickyweb: 'Sticky Web', reflect: 'Reflect', lightscreen: 'Light Screen', auroraveil: 'Aurora Veil', tailwind: 'Tailwind', safeguard: 'Safeguard', mist: 'Mist' })[k]).filter(Boolean);
+    if (names.length) out.push(label + ': ' + names.join(', '));
+  }
+  $('#fieldChips').innerHTML = out.map(x => `<span>${esc(x)}</span>`).join('');
+}
+function setSprite(side, ev) {
+  const el = side === 'p' ? $('#playerSprite') : $('#enemySprite');
+  const front = side === 'e';
+  const src = front ? img.front(ev.num, ev.shiny) : img.back(ev.num, ev.shiny);
+  el.dataset.fb = [front ? img.front(ev.num, false) : img.back(ev.num, false), img.art(ev.num, ev.shiny), img.icon(ev.num, ev.shiny)].join('|');
+  el.style.visibility = '';
+  el.alt = ev.name;
+  el.className = 'battle-sprite ' + (front ? 'foe' : 'mine') + ' gone';
+  el.onload = () => { el.classList.toggle('flip', !front && el.src.includes('/home/')); };
+  el.src = src;
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('gone')));
+}
+function anim(sel, cls) {
+  if (!save.settings.animations || save.settings.reducedEffects) return;
+  const el = $(sel); el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 600);
+}
+async function say(text) { $('#battleLog').textContent = text; await sleep(420 + Math.min(900, text.length * 16)); }
+async function playEvents(events) {
+  const st = battleState;
+  st.playing = true;
+  $('#battleControls').innerHTML = '';
+  for (const ev of events) {
+    if (battleState !== st) return;
+    const side = ev.side;
+    switch (ev.t) {
+      case 'msg': await say(ev.text); break;
+      case 'switch':
+        st.ui[side] = { name: ev.name, level: ev.level, hp: ev.hp, maxhp: ev.maxhp, status: ev.status, gender: ev.gender, tera: ev.tera, num: ev.num, shiny: ev.shiny };
+        setSprite(side, ev); renderStatusCard(side); if (side === 'e') renderFoeTeam(); await sleep(250); break;
+      case 'move': anim(side === 'p' ? '#playerSprite' : '#enemySprite', 'attack'); await sleep(180); break;
+      case 'damage':
+        if (st.ui[side]) { st.ui[side].hp = ev.hp; }
+        if (!ev.indirect) { anim(side === 'p' ? '#playerSprite' : '#enemySprite', 'hit'); if (ev.crit || ev.eff > 1) { anim('#battlefield', 'shake'); anim('#battleFlash', 'flash'); } }
+        renderStatusCard(side); await sleep(520); break;
+      case 'heal': if (st.ui[side]) st.ui[side].hp = ev.hp; renderStatusCard(side); await sleep(380); break;
+      case 'revive': break;
+      case 'status': if (st.ui[side] && (ev.idx === undefined || monView(side)?.idx === ev.idx)) { st.ui[side].status = ev.status; renderStatusCard(side); } break;
+      case 'boost': renderStatusCard(side); break;
+      case 'faint': (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.add('gone'); if (side === 'e') renderFoeTeam(); await sleep(520); break;
+      case 'tera': if (st.ui[side]) st.ui[side].tera = ev.type; (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.add('tera'); anim('#battleFlash', 'flash'); renderStatusCard(side); await sleep(600); break;
+      case 'charge': (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.toggle('semi', !!ev.semi); break;
+      case 'weather': case 'terrain': case 'side': case 'field': renderFieldChips(); break;
+      case 'sub': renderStatusCard(side); break;
+      case 'ko': st.ko.push(ev); break;
+      case 'turn': $('#battleTurn').textContent = 'Turn ' + ev.turn; break;
+    }
+  }
+  renderFieldChips();
+  for (const s of ['p', 'e']) renderStatusCard(s);
+  st.playing = false;
+}
+function renderCommands() {
+  const st = battleState; if (!st) return;
+  const b = st.b, req = E.getRequest(b);
+  const el = $('#battleControls');
+  if (b.ended) { finishBattle(); return; }
+  if (req.type === 'switch') { renderPartyPicker(true); return; }
+  const me = monView('p');
+  if (st.menu === 'fight') {
+    if (req.locked) { submit({ type: 'move', index: 0 }); return; }
+    const foe = monView('e');
+    el.innerHTML = req.moves.map(m => {
+      const mv = M()[m.id];
+      let effTxt = '';
+      if (mv.cat !== 'Status' && foe) {
+        const e = E.effectiveness(m.type, foe.types);
+        effTxt = e === 0 ? '<span class="eff no">No effect</span>' : e > 1 ? '<span class="eff se">Effective</span>' : e < 1 ? '<span class="eff nve">Not very effective</span>' : '';
+      }
+      let dmg = '';
+      if (save.settings.showDamage !== false && mv.cat !== 'Status' && foe) { const r = E.damageRange(b, me, foe, m.id); if (r && r.hi) dmg = ' · ~' + Math.round(r.lo / foe.maxhp * 100) + '–' + Math.min(999, Math.round(r.hi / foe.maxhp * 100)) + '%'; }
+      return `<button class="move-btn ${tclass(m.type)}" data-mi="${m.index}" ${m.disabled ? 'disabled' : ''} title="${esc(mv.desc || '')}">${effTxt}<span class="tball"></span><span><b>${esc(m.name)}</b><small>${esc(m.type)} · ${mv.cat === 'Status' ? 'Status' : mv.bp ? mv.bp + ' BP' : 'Varies'}${dmg}${E.moveSupport(m.id) === 'partial' ? ' · <span class="partial">simplified</span>' : ''}</small></span><span class="pp">${m.pp}/${m.maxpp}</span></button>`;
+    }).join('') + `<div class="cmd-row">${req.canTera ? `<button class="tera-toggle ${st.tera ? 'on' : ''}" id="teraBtn" aria-pressed="${st.tera}"><span class="gem"></span>Tera ${esc(req.teraType)}</button>` : '<span></span>'}<button class="cmd back-cmd" data-cmd="back">Back</button></div>`;
+    if (req.struggle) el.insertAdjacentHTML('afterbegin', '<button class="cmd fight" data-mi="-1">Struggle</button>');
+    return;
+  }
+  el.innerHTML = `<button class="cmd fight" data-cmd="fight">Fight</button><div class="cmd-row"><button class="cmd" data-cmd="party" ${req.trapped || !req.switches.length ? 'disabled' : ''}>Pokémon</button><button class="cmd" data-cmd="bag" ${st.tier !== 'practice' && st.tier !== 'easy' && st.itemsUsed >= 3 ? 'disabled title="Item limit reached"' : ''}>Bag</button></div><button class="cmd" data-cmd="run">${st.tier === 'practice' ? 'Run' : 'Forfeit'}</button>`;
+  $('#battleLog').textContent = 'What will ' + me.name + ' do?';
+}
+function renderPartyPicker(forced) {
+  const st = battleState, b = st.b, req = E.getRequest(b);
+  const team = b.sides.p.team;
+  $('#battleLog').textContent = forced ? (req.reason === 'pivot' ? 'Choose a Pokémon to switch in.' : 'Choose your next Pokémon.') : 'Switch to which Pokémon?';
+  showModal(`<h2 id="modalTitle">${forced ? 'Send out a Pokémon' : 'Switch Pokémon'}</h2><div class="party-pick">${team.map((m, i) => {
+    const ok = req.switches?.includes(i) || (!forced && req.switches?.includes(i));
+    return `<button data-swap="${i}" ${ok ? '' : 'disabled'}>${iconOf(m.num, m.shiny)}<span><b>${esc(m.name)}</b> ${m.status ? `<span class="status-chip st-${m.status}">${m.status.toUpperCase()}</span>` : ''}<br><small class="muted">Lv. ${m.level} · ${m.fainted ? 'Fainted' : m.hp + '/' + m.maxhp + ' HP'}${i === b.sides.p.active && !m.fainted ? ' · in battle' : ''}</small><span class="hp"><span class="hp-bar"><i class="${hpCls(m.hp / m.maxhp * 100)}" style="width:${m.hp / m.maxhp * 100}%"></i></span></span></span></button>`;
+  }).join('')}</div>${forced ? '' : '<div class="row-btns"><button class="btn ghost" data-close>Cancel</button></div>'}`, { locked: forced, wide: true });
+  $$('#modalContent [data-swap]').forEach(btn => btn.onclick = () => { closeModal(true); submit({ type: 'switch', index: +btn.dataset.swap }); });
+}
+function renderBattleBag() {
+  const st = battleState, team = st.b.sides.p.team;
+  const items = Object.keys(save.inventory).filter(id => G.ITEMS[id]?.battle && save.inventory[id] > 0);
+  showModal(`<h2 id="modalTitle">Bag</h2>${st.tier === 'medium' || st.tier === 'hard' ? `<p class="muted">Daily ${st.tier} battles allow up to 3 items (${3 - st.itemsUsed} left).</p>` : ''}<div class="pick-grid">${items.map(id => `<button data-bitem="${id}">${pic(G.itemSprite(id), [], 'alt=""')}<span>${esc(G.ITEMS[id].name)}</span><small class="muted">×${save.inventory[id]}</small></button>`).join('') || '<div class="empty">No battle items. Buy Potions in the Shop.</div>'}</div>`, { wide: true });
+  $$('#modalContent [data-bitem]').forEach(btn => btn.onclick = () => {
+    const id = btn.dataset.bitem, it = G.ITEMS[id];
+    showModal(`<h2 id="modalTitle">Use ${esc(it.name)} on…</h2><div class="party-pick">${team.map((m, i) => { const ok = it.targetFainted ? m.fainted : !m.fainted; return `<button data-bt="${i}" ${ok ? '' : 'disabled'}>${iconOf(m.num, m.shiny)}<span><b>${esc(m.name)}</b><br><small class="muted">${m.fainted ? 'Fainted' : m.hp + '/' + m.maxhp + ' HP'}</small></span></button>`; }).join('')}</div><div class="row-btns"><button class="btn ghost" data-close>Cancel</button></div>`, { wide: true });
+    $$('#modalContent [data-bt]').forEach(t => t.onclick = () => {
+      closeModal(true);
+      consume(id); st.itemsUsed++; persist();
+      submit({ type: 'item', item: { name: it.name, ...it.battle }, target: +t.dataset.bt });
+    });
+  });
+}
+async function submit(action) {
+  const st = battleState; if (!st || st.playing) return;
+  if (action.type === 'move' && st.tera) action.tera = true;
+  let events;
+  try { events = E.submitAction(st.b, action); }
+  catch (err) { console.error(err); toast(err.message || 'That action is not possible.'); renderCommands(); return; }
+  st.menu = 'main'; st.tera = false;
+  await playEvents(events);
+  renderCommands();
+}
+function confirmForfeit(after) {
+  const st = battleState;
+  confirmBox(st.tier === 'practice' ? 'Leave practice?' : 'Forfeit this battle?', st.tier === 'practice' ? 'You will receive no rewards.' : 'Forfeiting counts as a loss and uses today\'s attempt.', st.tier === 'practice' ? 'Leave' : 'Forfeit', () => {
+    st.b.ended = true; st.b.winner = 'e'; st.forfeit = true;
+    finishBattle().then(() => after?.());
+  }, true);
+}
+async function finishBattle() {
+  const st = battleState; if (!st || st.finished) return; st.finished = true;
+  const b = st.b, won = b.winner === 'p';
+  const tier = st.tier, t = G.DAILY_TIERS[tier];
+  const key = G.todayKey();
+  const party = partyMons();
+  const participants = new Set(b.sides.p.team.filter(m => m.activeTurns > 0 || m === E.active(b, 'p') || st.ko.some(k => k.seenBy.includes(m.uid))).map(m => m.uid));
+  // EXP, EVs, friendship
+  const gains = {};
+  for (const p of party) gains[p.uid] = { exp: 0, evs: {}, levels: [], learned: [] };
+  if (!st.forfeit) for (const ko of st.ko) {
+    const seen = ko.seenBy.filter(u => gains[u]);
+    for (const p of party) {
+      const isPart = seen.includes(p.uid);
+      const fainted = b.sides.p.team.find(m => m.uid === p.uid)?.fainted;
+      if (fainted && isPart) continue;
+      const exp = G.expYield(ko.species, ko.level, p.level, { trainer: tier !== 'practice', luckyEgg: p.item === 'luckyegg', share: isPart ? 1 : 0.5 });
+      gains[p.uid].exp += exp;
+      if (isPart) for (const [k, v] of Object.entries(G.evYieldFor(ko.species, p.item))) gains[p.uid].evs[k] = (gains[p.uid].evs[k] || 0) + v;
+    }
+  }
+  const evoQueue = [];
+  for (const p of party) {
+    const g = gains[p.uid];
+    if (g.exp) { g.levels = G.gainExp(p, g.exp); g.learned = learnNewMoves(p, g.levels); }
+    g.evApplied = G.addEvs(p, g.evs);
+    if (participants.has(p.uid)) {
+      p.battles = (p.battles || 0) + 1; if (won) p.wins = (p.wins || 0) + 1;
+      p.friendship = Math.min(255, p.friendship + (won ? 3 : 1) * (p.item === 'soothebell' ? 2 : 1));
+      if (p.friendship >= 255 && !p.marks.includes('partner')) { p.marks.push('partner'); g.newMark = 'partner'; }
+      if (won && tier === 'hard') { p.hardWins = (p.hardWins || 0) + 1; if (p.hardWins >= 7 && !p.marks.includes('mightiest')) { p.marks.push('mightiest'); g.newMark = 'mightiest'; } }
+    }
+    if (autoEvolutions(p).length) evoQueue.push(p);
+  }
+  // Coins and records
+  let coins = won ? t.coins : Math.floor(t.coins * 0.3);
+  if (st.forfeit) coins = tier === 'practice' ? 0 : Math.floor(t.coins * 0.2);
+  const amulet = party.some(p => participants.has(p.uid) && p.item === 'amuletcoin');
+  if (amulet) coins *= 2;
+  save.coins += coins;
+  save.battles++; if (won) save.wins++;
+  const pTeam = b.sides.p.team;
+  const hpLeftPct = pTeam.reduce((a, m) => a + m.hp / m.maxhp, 0) / pTeam.length;
+  const fainted = pTeam.filter(m => m.fainted).length;
+  const turns = b.turn;
+  let score = 0;
+  if (tier === 'practice') { save.practiceCount++; if (won) bumpDay('practiceWins'); }
+  else {
+    score = G.battleScore(tier, won && !st.forfeit, { turns, hpLeftPct, fainted });
+    save.daily[tier] = { result: won ? 'win' : 'loss', score, turns, date: key, hp: Math.round(hpLeftPct * 100), team: st.trainer.team.map(p => sp(p).num) };
+    save.dailyScores = save.dailyScores || {};
+    save.dailyScores[key] = (save.dailyScores[key] || 0) + score;
+    for (const k of Object.keys(save.dailyScores)) if (G.dayDiff(k, key) > 6) delete save.dailyScores[k];
+    if (won) bumpDay('dailyWins');
+    if (DAILY.every(k => save.daily[k]?.result === 'win')) { save.stats.dailySweeps++; toast('Daily sweep! All three battles won.'); }
+  }
+  const bs = b.stats;
+  for (const k of ['kos', 'superEffective', 'crits', 'damageDealt', 'statusMoves', 'teraUsed']) { save.stats[k] = (save.stats[k] || 0) + (bs[k] || 0); bumpDay(k, bs[k] || 0); }
+  if (won && bs.teraUsed) save.stats.teraWins++;
+  for (const m of st.trainer.team) { const n = sp(m).num; if (!save.seenDex.includes(n)) save.seenDex.push(n); }
+  save.history = [...(save.history || []), { date: key, tier, won, score, turns }].slice(-30);
+  afterProgress();
+  // Results
+  const rows = party.map(p => {
+    const g = gains[p.uid];
+    const prog = G.levelProgress(p);
+    const evTxt = Object.entries(g.evApplied || {}).map(([k, v]) => '+' + v + ' ' + STAT_LABEL[k]).join(', ');
+    return `<div class="result-mon">${iconOf(sp(p).num, p.shiny)}<span><b>${esc(p.nickname || sp(p).name)}</b> ${g.levels.length ? `<span class="badge-chip gold">Lv. ${p.level}!</span>` : `<small>Lv. ${p.level}</small>`}<br><small>+${fmt(g.exp)} EXP${evTxt ? ' · EVs ' + evTxt : ''}${g.learned.length ? ' · learned ' + esc(g.learned.join(', ')) : ''}${g.newMark ? ' · earned the ' + esc(G.MARKS[g.newMark].name) + '!' : ''}</small><div class="xp-bar"><i style="width:${prog.pct}%"></i></div></span></div>`;
+  }).join('');
+  const choice = await new Promise(resolve => {
+    showModal(`<div class="eyebrow">${tier === 'practice' ? 'Practice' : 'Daily · ' + esc(t.name)}</div><h2 id="modalTitle">${won ? 'You won!' : st.forfeit ? 'You forfeited.' : 'You lost…'}</h2>
+      <p>${won ? 'You defeated ' + esc(st.trainer.name) + ' in ' + turns + ' turns.' : 'Train up and try again' + (tier === 'practice' ? '!' : ' tomorrow!')}</p>
+      <div class="odds"><div class="odds-row"><span>Coins</span><b>+${coins}${amulet ? ' (Amulet Coin ×2)' : ''}</b></div>${tier !== 'practice' ? `<div class="odds-row"><span>Daily score</span><b>${fmt(score)} pts</b></div>` : ''}<div class="odds-row"><span>Knockouts</span><b>${bs.kos}</b></div></div>
+      <div class="result-list">${rows}</div>
+      <div class="row-btns">${tier !== 'practice' && won ? `<button class="btn ghost" data-share="${tier}">Share result</button>` : ''}${tier === 'practice' ? '<button class="btn ghost" id="againPractice">Battle again</button>' : ''}<button class="btn primary" data-close autofocus>Continue</button></div>`, { wide: true, onClose: () => resolve('continue') });
+    const again = $('#againPractice'); if (again) again.onclick = () => { modalOnClose = null; closeModal(true); resolve('again'); };
+  });
+  if (battleState === st) battleState = null;
+  const runEvos = () => {
+    const p = evoQueue.shift();
+    if (!p) { if (choice === 'again') startBattle('practice'); else if (activeScreen === 'battle') go('home'); return; }
+    const o = autoEvolutions(p)[0]; if (!o) return runEvos(); doEvolve(p, o, runEvos);
+  };
+  runEvos();
+}
+function shareText(tier) {
+  const r = save.daily[tier]; if (!r) return '';
+  const hearts = r.hp >= 75 ? '💚💚💚' : r.hp >= 40 ? '💚💚🖤' : r.hp > 0 ? '💚🖤🖤' : '🖤🖤🖤';
+  const all = DAILY.map(k => save.daily[k]?.result === 'win' ? '🟩' : save.daily[k] ? '🟥' : '⬜').join('');
+  return `PokeDuel ${G.todayKey()} ${all}\n${G.DAILY_TIERS[tier].name}: won in ${r.turns} turns ${hearts}\nScore ${fmt(r.score)} · ${location.origin}`;
+}
+async function share(tier) {
+  const text = shareText(tier);
+  try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast('Result copied — paste it anywhere!'); } }
+  catch (e) { if (e?.name !== 'AbortError') showModal(`<h2 id="modalTitle">Share your result</h2><textarea readonly>${esc(text)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`); }
+}
+
+// ---------- Event wiring ----------
+function setupListeners() {
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button, [data-go], label') || e.target;
+    if (t.closest?.('[data-close]')) { closeModal(true); return; }
+    const goEl = e.target.closest('[data-go]'); if (goEl) { closeModal(true); go(goEl.dataset.go); return; }
+    const battleBtn = e.target.closest('[data-battle]'); if (battleBtn) { startBattle(battleBtn.dataset.battle); return; }
+    const box = e.target.closest('[data-box]'); if (box) { openBox(box.dataset.box); return; }
+    const shareBtn = e.target.closest('[data-share]'); if (shareBtn) { share(shareBtn.dataset.share); return; }
+    const openMon = e.target.closest('[data-open-mon]'); if (openMon) { ui.sel = openMon.dataset.openMon; go('boxes'); return; }
+    if (e.target.closest('#claimCheckin')) { claimCheckin(); return; }
+    const cm = e.target.closest('[data-claim-mission]');
+    if (cm) { const m = save.missions.list[+cm.dataset.claimMission]; if (m && !m.claimed) { m.claimed = true; save.coins += m.reward; afterProgress(); renderHome(); toast('Mission complete! +' + m.reward + ' coins'); } return; }
+    if (e.target.closest('#missionBonus')) { if (!save.missions.bonus) { save.missions.bonus = true; save.inventory.expcandyl = (save.inventory.expcandyl || 0) + 1; afterProgress(); renderHome(); toast('Bonus: Exp. Candy L added to your Bag!'); } return; }
+    const rank = e.target.closest('[data-rank]'); if (rank) { ui.rankTab = rank.dataset.rank; renderRanks(); return; }
+  });
+  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+  $('#modalClose').addEventListener('click', () => closeModal());
+  // Starter
+  $('#generationBar').addEventListener('click', e => { const b = e.target.closest('[data-gen]'); if (b) { ui.starterGen = +b.dataset.gen; renderStarter(); } });
+  $('#onboardStarterGrid').addEventListener('click', e => { const b = e.target.closest('[data-pick-starter]'); if (b) { ui.starterSel = b.dataset.pickStarter; renderStarter(); } });
+  $('#confirmStarter').addEventListener('click', confirmStarter);
+  // Boxes
+  $('#screen-boxes').addEventListener('click', e => {
+    const s = e.target.closest('[data-sel]'); if (s) { ui.sel = s.dataset.sel; renderBoxes(); return; }
+    const tab = e.target.closest('[data-sumtab]'); if (tab) { ui.sumTab = tab.dataset.sumtab; renderSummary(); return; }
+    const act = e.target.closest('[data-act]'); if (act) { summaryAction(act.dataset.act, act); return; }
+  });
+  $('#boxPrev').addEventListener('click', () => { ui.boxPage = Math.max(0, ui.boxPage - 1); renderBoxes(); });
+  $('#boxNext').addEventListener('click', () => { ui.boxPage++; const pages = Math.ceil(filteredBox().length / 30); if (ui.boxPage >= pages) ui.boxPage = 0; renderBoxes(); });
+  $('#boxSearch').addEventListener('input', e => { ui.boxSearch = e.target.value; ui.boxPage = 0; renderBoxes(); });
+  $('#boxSort').addEventListener('change', e => { ui.boxSort = e.target.value; renderBoxes(); });
+  // Shop
+  $('#screen-shop').addEventListener('click', e => {
+    const c = e.target.closest('[data-shopcat]'); if (c) { ui.shopCat = c.dataset.shopcat; ui.shopSel = null; ui.shopQty = 1; renderShop(); return; }
+    const s = e.target.closest('[data-shopsel]'); if (s) { ui.shopSel = s.dataset.shopsel; ui.shopQty = 1; renderShop(); return; }
+    const q = e.target.closest('[data-qty]'); if (q) { ui.shopQty = Math.max(1, Math.min(99, ui.shopQty + +q.dataset.qty)); renderShopDetail(); return; }
+    const b = e.target.closest('[data-buy]'); if (b) { buyItem(b.dataset.buy); return; }
+  });
+  // Bag
+  $('#screen-bag').addEventListener('click', e => {
+    const c = e.target.closest('[data-bagcat]'); if (c) { ui.bagCat = c.dataset.bagcat; ui.bagSel = null; renderBag(); return; }
+    const s = e.target.closest('[data-bagsel]'); if (s) { ui.bagSel = s.dataset.bagsel; renderBag(); return; }
+    if (e.target.closest('[data-baguse]')) { const id = ui.bagSel; pickPokemon('Use ' + G.ITEMS[id].name + ' on…', null, p => applyItem(id, p)); return; }
+    if (e.target.closest('[data-baggive]')) {
+      const id = ui.bagSel;
+      pickPokemon('Give ' + G.ITEMS[id].name + ' to…', null, p => { if (p.item) save.inventory[p.item] = (save.inventory[p.item] || 0) + 1; p.item = id; consume(id); persist(); renderBag(); toast(sp(p).name + ' is now holding ' + G.ITEMS[id].name + '.'); });
+    }
+  });
+  // Dex
+  const dexRefresh = () => { ui.dexShown = 120; renderDex(); };
+  $('#dexQuery').addEventListener('input', dexRefresh); $('#dexFilter').addEventListener('change', dexRefresh); $('#dexGen').addEventListener('change', dexRefresh);
+  $('#loadMore').addEventListener('click', () => { ui.dexShown += 120; renderDex(); });
+  $('#dexResults').addEventListener('click', e => { const c = e.target.closest('[data-dex]'); if (c) showDexEntry(c.dataset.dex); });
+  // Profile
+  $('#screen-profile').addEventListener('click', e => {
+    if (e.target.closest('#renameTrainer')) {
+      showModal(`<h2 id="modalTitle">Trainer name</h2><p class="muted">Shown on leaderboards. Keep it friendly — no personal information.</p><input id="nameInput" maxlength="16" value="${esc(save.trainerName)}" autofocus><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="nameOk">Save</button></div>`);
+      $('#nameOk').onclick = () => { save.trainerName = $('#nameInput').value.trim().replace(/[<>]/g, '').slice(0, 16) || 'Trainer'; closeModal(true); persist(); renderProfile(); };
+      return;
+    }
+    const slot = e.target.closest('[data-showslot]');
+    if (slot) { pickPokemon('Choose a Pokémon to showcase', null, p => { const i = +slot.dataset.showslot; const list = save.showcase.filter(u => u !== p.uid); list.splice(Math.min(i, list.length), 0, p.uid); save.showcase = list.slice(0, 3); persist(); renderProfile(); }); return; }
+    if (e.target.closest('#shareCard')) {
+      const show = save.showcase.map(byUid).filter(Boolean).map(p => (p.shiny ? '✦' : '') + G.displayName(p) + ' Lv.' + p.level).join(' · ');
+      const text = `PokeDuel Trainer Card — ${trainerName()} (${rankName(G.trainerScore(save))})\nScore ${fmt(G.trainerScore(save))} · Dex ${save.ownedDex.length} · Shinies ${save.shinyDex.length} · Wins ${save.wins}${show ? '\nShowcase: ' + show : ''}`;
+      navigator.clipboard?.writeText(text).then(() => toast('Trainer card copied!'), () => showModal(`<textarea readonly>${esc(text)}</textarea><div class="row-btns"><button class="btn primary" data-close>Done</button></div>`));
+    }
+  });
+  $('#exportSave').addEventListener('click', exportFile);
+  $('#copySave').addEventListener('click', copyCode);
+  $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; if (f.size > 5e6) { toast('That file is too large to be a save.'); return; } f.text().then(previewImport); e.target.value = ''; });
+  $('#pasteSave').addEventListener('click', () => {
+    showModal(`<h2 id="modalTitle">Paste a save code</h2><textarea id="pasteBox" placeholder="Paste your save code or JSON here" autofocus></textarea><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pasteOk">Continue</button></div>`);
+    $('#pasteOk').onclick = () => { const v = $('#pasteBox').value; closeModal(true); previewImport(v); };
+  });
+  $('#animationsToggle').addEventListener('change', e => { save.settings.animations = e.target.checked; persist(); });
+  $('#effectsToggle').addEventListener('change', e => { save.settings.reducedEffects = e.target.checked; document.body.classList.toggle('reduced-effects', e.target.checked); persist(); });
+  $('#damageToggle').addEventListener('change', e => { save.settings.showDamage = e.target.checked; persist(); });
+  $('#speedSelect').addEventListener('change', e => { save.settings.battleSpeed = Number(e.target.value) || 1; persist(); });
+  $('#resetSave').addEventListener('click', () => confirmBox('Reset everything?', 'This deletes the save in this browser (a backup copy is kept). Your cloud save is not deleted, but it will be overwritten if you keep playing while signed in.', 'Delete local save', () => {
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(save)); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    save = G.defaultSave(); battleState = null; persist(); afterSaveReplaced(); toast('Local save reset.');
+  }, true));
+  // Battle
+  $('#battleControls').addEventListener('click', e => {
+    const st = battleState; if (!st || st.playing) return;
+    const c = e.target.closest('[data-cmd]'), mi = e.target.closest('[data-mi]');
+    if (e.target.closest('#teraBtn')) { st.tera = !st.tera; renderCommands(); return; }
+    if (mi) { submit({ type: 'move', index: +mi.dataset.mi }); return; }
+    if (!c) return;
+    const cmd = c.dataset.cmd;
+    if (cmd === 'fight') { st.menu = 'fight'; renderCommands(); }
+    if (cmd === 'back') { st.menu = 'main'; renderCommands(); }
+    if (cmd === 'party') renderPartyPicker(false);
+    if (cmd === 'bag') renderBattleBag();
+    if (cmd === 'run') confirmForfeit();
+  });
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.key === 'Escape') { if (!$('#modal').classList.contains('hidden')) { closeModal(); return; } if (activeScreen === 'battle' && battleState?.menu === 'fight') { battleState.menu = 'main'; renderCommands(); return; } if (!['home', 'battle', 'starter'].includes(activeScreen)) go('home'); return; }
+    if (!$('#modal').classList.contains('hidden')) return;
+    if (activeScreen === 'home') {
+      if (e.key.toLowerCase() === 'b') go('boxes');
+      if (e.key.toLowerCase() === 'p') startBattle('practice');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const items = $$('#mainMenu .menu-item'); const i = items.indexOf(document.activeElement);
+        const n = i < 0 ? 0 : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[n].focus(); e.preventDefault();
+      }
+    }
+    if (activeScreen === 'battle' && battleState && !battleState.playing && /^[1-4]$/.test(e.key) && battleState.menu === 'fight') { const b = $(`#battleControls [data-mi="${+e.key - 1}"]`); if (b && !b.disabled) b.click(); }
+  });
+  window.addEventListener('popstate', () => { const name = location.hash.replace('#/', '') || 'home'; if (name !== activeScreen) go(name, { noHash: true }); });
+  window.addEventListener('beforeunload', e => { if (battleState && !battleState.b.ended && battleState.tier !== 'practice') { e.preventDefault(); e.returnValue = ''; } });
+}
+
+// ---------- Boot ----------
+async function loadData() {
+  const files = ['moves', 'pokedex', 'abilities', 'learnsets'];
+  let done = 0;
+  const bar = $('#bootBar');
+  const out = await Promise.all(files.map(f => fetch('data/' + f + '.json').then(r => { if (!r.ok) throw new Error(f + ' ' + r.status); return r.json(); }).then(j => { done++; bar.style.width = (done / files.length * 100) + '%'; return j; })));
+  const [moves, dex, abilities, learnsets] = out;
+  E.setData({ moves, dex, abilities });
+  G.setGameData({ dex, moves, learnsets });
+  G.registerEvolutionItems();
+  for (const [id, it] of Object.entries(G.ITEMS)) E.ITEM_NAMES[id] = it.name;
+}
+// Optional artwork listed in assets/manifest.json (see ASSET_REQUESTS.md). Only
+// files named there are requested, so missing art never causes 404s.
+const assets = { backgrounds: {} };
+async function loadAssetManifest() {
+  try {
+    const r = await fetch('assets/manifest.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    const m = await r.json();
+    assets.backgrounds = m.backgrounds || {};
+    if (assets.backgrounds.home) document.body.style.setProperty('--home-bg', `url("assets/backgrounds/${assets.backgrounds.home}")`);
+  } catch (e) { /* artwork is optional */ }
+}
+async function boot() {
+  try { await loadData(); }
+  catch (err) {
+    console.error('Data load failed', err);
+    $('#bootMessage').textContent = 'Could not load game data. Check your connection and try again.';
+    $('#bootRetry').hidden = false;
+    return;
+  }
+  save = readSave();
+  initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
+  checkNewDay();
+  if (save.settings.reducedEffects) document.body.classList.add('reduced-effects');
+  loadAssetManifest();
+  setupListeners();
+  document.body.classList.remove('booting');
+  const start = location.hash.replace('#/', '');
+  go(save.starterChosen ? (SCREENS.includes(start) && start !== 'battle' && start !== 'starter' ? start : 'home') : 'starter', { noHash: false });
+  checkMedals();
+  persist();
+  booting = false;
+  startFirebaseAuth();
+}
+$('#bootRetry').addEventListener('click', () => { $('#bootRetry').hidden = true; $('#bootMessage').textContent = 'Loading Pokémon data…'; boot(); });
+boot();
 })();
