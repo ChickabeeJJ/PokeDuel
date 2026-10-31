@@ -310,7 +310,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .sum-head{display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(180deg,#fff27a,var(--hot) 60%,var(--hot-2));color:var(--hot-ink);font:800 1.5rem/1 var(--display);font-style:italic;text-transform:uppercase}
 .sum-head .ball{width:24px;height:24px;flex:0 0 24px;border-radius:50%;background:linear-gradient(#e8423b 0 45%,#1a1a1a 45% 55%,#f4f4f4 55%);box-shadow:0 0 0 2px #1a1a1a}
 .sum-head .lvl{margin-left:auto;padding:4px 12px;background:#1d1f24;color:#ffffff;font-size:1rem;clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%)}
-.sum-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+.sum-scroll{flex:1;min-height:0;overflow:auto}
 .sum-body{padding:12px 16px;display:grid;gap:12px}
 .sum-art{position:relative;display:grid;place-items:center;min-height:150px;background:radial-gradient(closest-side,rgba(139,147,163,.25),transparent)}
 .sum-art img{width:170px;height:170px;object-fit:contain;filter:drop-shadow(0 10px 12px rgba(0,0,0,.45))}
@@ -359,7 +359,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .bag-cat:hover{color:#ffffff;background:rgba(255,255,255,.08)}
 .bag-cat.on{color:var(--hot-ink);background:linear-gradient(90deg,var(--hot),var(--hot-2))}
 .bag-cat .n{margin-left:auto;font:800 .8rem var(--font);font-style:normal;opacity:.8}
-.bag-main{display:flex;flex-direction:column;min-height:0;padding:16px;gap:14px;overflow:auto;scrollbar-width:thin}
+.bag-main{display:flex;flex-direction:column;min-height:0;padding:16px;gap:14px;overflow:auto}
 .feature-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .feature{position:relative;display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:center;padding:12px 16px;border:0;text-align:left;overflow:hidden;isolation:isolate;background:var(--fg,linear-gradient(120deg,#717b90,#3c414c));clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 .feature::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--stripes)}
@@ -787,7 +787,7 @@ body{background:
 .j-locked{color:var(--dim)}
 .j-reward .ic,.j-done .ic,.j-locked .ic{width:16px;height:16px}
 @media (max-width:820px){
-  .j-regions{grid-template-columns:repeat(9,minmax(86px,1fr));overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+  .j-regions{grid-template-columns:repeat(9,minmax(86px,1fr));overflow-x:auto;padding-bottom:4px}
   .j-head h1{font-size:2.1rem}
   .jrow{grid-template-columns:52px minmax(0,1fr);row-gap:8px;padding-right:14px}
   .jrow.route{margin-left:14px}
@@ -869,6 +869,40 @@ input.tick:disabled{opacity:.45;cursor:not-allowed}
 .fx-aura b:nth-child(3){animation-delay:.3s}
 .fx-aura.crystal b{border-color:#e9eef7;box-shadow:0 0 20px var(--c),0 0 6px #fff}
 @keyframes fxAura{0%{translate:0 0;scale:.6;opacity:0}25%{opacity:1}100%{translate:0 calc(var(--s,120px) * -1);scale:1.1;opacity:0}}
+
+/* ---------- Sliders: custom scrollbars and range inputs ----------
+   Angular steel thumb in a recessed track; it turns yellow on hover and drag,
+   like the rest of the selection system. Firefox gets the matching colours. */
+::-webkit-scrollbar{width:14px;height:14px}
+::-webkit-scrollbar-track{background:linear-gradient(90deg,rgba(0,0,0,.42),rgba(0,0,0,.28));box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+::-webkit-scrollbar:horizontal{height:12px}
+::-webkit-scrollbar-track:horizontal{background:linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,.28))}
+::-webkit-scrollbar-thumb{min-height:44px;border:3px solid transparent;background:linear-gradient(90deg,#9aa1ae,#6c7381 55%,#545a66) padding-box;box-shadow:inset 1px 0 0 rgba(255,255,255,.35),inset -1px 0 0 rgba(0,0,0,.35)}
+::-webkit-scrollbar-thumb:horizontal{min-width:44px;background:linear-gradient(180deg,#9aa1ae,#6c7381 55%,#545a66) padding-box}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#fff27a,var(--hot) 50%,var(--hot-2)) padding-box}
+::-webkit-scrollbar-thumb:horizontal:hover{background:linear-gradient(180deg,#fff27a,var(--hot) 50%,var(--hot-2)) padding-box}
+::-webkit-scrollbar-thumb:active{background:linear-gradient(90deg,#fff9b8,#ffe04d 50%,var(--hot)) padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none}
+/* Inner panels (modals, lists, summaries) use a slimmer slider. */
+.modal::-webkit-scrollbar,.sum-scroll::-webkit-scrollbar,.bag-main::-webkit-scrollbar,.pick-grid::-webkit-scrollbar,.box-grid-wrap::-webkit-scrollbar,.j-regions::-webkit-scrollbar,.result-list::-webkit-scrollbar,.move-list::-webkit-scrollbar{width:10px;height:10px}
+.modal::-webkit-scrollbar-thumb,.sum-scroll::-webkit-scrollbar-thumb,.bag-main::-webkit-scrollbar-thumb,.pick-grid::-webkit-scrollbar-thumb,.box-grid-wrap::-webkit-scrollbar-thumb,.j-regions::-webkit-scrollbar-thumb,.result-list::-webkit-scrollbar-thumb,.move-list::-webkit-scrollbar-thumb{border-width:2px}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-color:#7c8391 rgba(0,0,0,.35)}}
+
+/* Range inputs share the same look: recessed track, filled part in yellow
+   (set --fill as a percentage from script), angular steel handle. */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;min-height:0;height:28px;padding:0;margin:0;background:transparent;box-shadow:none;clip-path:none;cursor:pointer}
+input[type=range]:focus{outline:0;background:transparent;box-shadow:none}
+input[type=range]::-webkit-slider-runnable-track{height:10px;background:linear-gradient(90deg,var(--hot-2),var(--hot) var(--fill,0%),rgba(0,0,0,.45) var(--fill,0%));box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+input[type=range]::-moz-range-track{height:10px;background:rgba(0,0,0,.45);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+input[type=range]::-moz-range-progress{height:10px;background:linear-gradient(90deg,var(--hot-2),var(--hot))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:28px;margin-top:-9px;border:0;background:linear-gradient(180deg,#ffffff,#c9ced8 55%,#9aa1ae);box-shadow:0 2px 6px rgba(0,0,0,.5),inset 0 -3px 0 rgba(0,0,0,.18);clip-path:polygon(25% 0,100% 0,75% 100%,0 100%)}
+input[type=range]::-moz-range-thumb{width:22px;height:28px;border:0;border-radius:0;background:linear-gradient(180deg,#ffffff,#c9ced8 55%,#9aa1ae);box-shadow:0 2px 6px rgba(0,0,0,.5)}
+input[type=range]:hover::-webkit-slider-thumb,input[type=range]:active::-webkit-slider-thumb{background:linear-gradient(180deg,#fff27a,var(--hot) 50%,var(--hot-2))}
+input[type=range]:hover::-moz-range-thumb,input[type=range]:active::-moz-range-thumb{background:linear-gradient(180deg,#fff27a,var(--hot) 50%,var(--hot-2))}
+input[type=range]:focus-visible::-webkit-slider-thumb{outline:3px solid var(--lime)}
+input[type=range]:focus-visible::-moz-range-thumb{outline:3px solid var(--lime)}
+input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 
 /* ---------- Responsive ---------- */
 @media (max-width:1280px){

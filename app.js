@@ -1625,6 +1625,10 @@ async function share(tier) {
 
 // ---------- Event wiring ----------
 function setupListeners() {
+  // Range sliders colour the filled part of their track from --fill.
+  const fillRange = r => r.style.setProperty('--fill', ((r.value - (r.min || 0)) / ((r.max || 100) - (r.min || 0)) * 100) + '%');
+  document.addEventListener('input', e => { if (e.target.matches?.('input[type=range]')) fillRange(e.target); });
+  new MutationObserver(() => $$('input[type=range]:not([data-filled])').forEach(r => { r.dataset.filled = '1'; fillRange(r); })).observe(document.body, { childList: true, subtree: true });
   document.addEventListener('click', e => {
     const t = e.target.closest('button, [data-go], label') || e.target;
     if (t.closest?.('[data-close]')) { closeModal(true); return; }
