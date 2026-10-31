@@ -1071,7 +1071,7 @@ function setupArena(tier) {
   arena.style.setProperty('--arena-bg', art ? `url("assets/backgrounds/${art.file}")` : 'none');
   const foe = art?.foe || { x: 76, y: 58, w: 26 }, me = art?.player || { x: 28, y: 92, w: 40 };
   // Square sprite boxes sized from the platform width; feet sit near the platform centre.
-  Object.assign($('#foeSlot').style, { left: foe.x + '%', bottom: (100 - foe.y - 2) + '%', width: foe.w * 0.62 + '%' });
+  Object.assign($('#foeSlot').style, { left: foe.x + '%', bottom: (100 - foe.y - 3) + '%', width: foe.w * 0.72 + '%' });
   Object.assign($('#playerSlot').style, { left: me.x + '%', bottom: (100 - me.y - 3) + '%', width: me.w * 0.6 + '%' });
 }
 function monView(side) { return E.active(battleState.b, side); }
@@ -1126,7 +1126,7 @@ function fitSprite(el, side) {
   if (hd || !el.naturalHeight) { el.style.width = el.style.height = ''; return; }
   const slot = el.parentElement.getBoundingClientRect();
   // Static 96px sprites have empty padding; animated ones are cropped tight.
-  const fill = /\.gif$/.test(el.src) ? (side === 'p' ? 0.56 : 0.7) : 0.9;
+  const fill = /\.gif$/.test(el.src) ? (side === 'p' ? 0.56 : 0.95) : (side === 'p' ? 0.9 : 1.1);
   const scale = Math.max(1, Math.floor((slot.width * fill) / Math.max(el.naturalWidth, el.naturalHeight) * 2) / 2);
   el.style.width = el.naturalWidth * scale + 'px';
   el.style.height = el.naturalHeight * scale + 'px';

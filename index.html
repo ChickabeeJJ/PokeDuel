@@ -26,10 +26,10 @@
 <body>
 <header class="hud" id="hud" hidden>
   <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
-  <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
-    <img id="hudAvatar" alt="" width="40" height="40">
-    <span><b id="hudName">Trainer</b><small id="hudRank">Rank</small></span>
-  </button>
+  <div class="hud-wallet">
+    <span class="pill" title="Trainer points"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg><b id="hudScore">0</b>TP</span>
+    <span class="pill" title="Coins"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg><b id="coins">0</b></span>
+  </div>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
     <button data-go="boxes" class="hud-link">Boxes</button>
@@ -38,10 +38,10 @@
     <button data-go="dex" class="hud-link">Pokédex</button>
     <button data-go="leaderboard" class="hud-link">Ranks</button>
   </nav>
-  <div class="hud-wallet">
-    <span class="pill" title="Trainer points"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg><b id="hudScore">0</b>TP</span>
-    <span class="pill" title="Coins"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg><b id="coins">0</b></span>
-  </div>
+  <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
+    <img id="hudAvatar" alt="" width="40" height="40">
+    <span><b id="hudName">Trainer</b><small id="hudRank">Rank</small></span>
+  </button>
 </header>
 
 <main id="app">
