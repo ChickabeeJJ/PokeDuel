@@ -21,6 +21,11 @@ Please keep everything original (no screenshots or traced game art), with no Pok
 ## Integrated
 
 - `battle-field.webp` (owner-supplied, 1672×941) is used for every battle tier. Easy and practice battles use daylight, medium uses a dusk grade and hard uses a night grade, all applied in CSS. Its platform centres are recorded in `assets/manifest.json`.
+- `arena-rock.webp`, `arena-sea.webp` and `arena-snow.webp` (owner-supplied, 1672×941, same platform layout).
+  - **Journey:** each Gym Leader, Elite Four member or Champion fights in the arena that matches their type, and the trainer on the road to a gym uses that gym's arena. Rock, Ground, Fighting, Steel and Dragon use rock; Water uses sea; Ice uses snow.
+  - **Daily and practice battles:** snow and blizzard days use snow, and sandstorm days use rock.
+  - **Settings:** both mappings are `typeArenas` and `weatherArenas` in the manifest.
+  - **Arenas that would complete the set:** Fire (volcanic), Grass/Bug (forest), Electric/Steel (city or power plant), Psychic/Ghost/Fairy (indoor gym), with the same framing and platform positions.
 
 ## Optional extras
 

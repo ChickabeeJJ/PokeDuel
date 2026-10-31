@@ -668,7 +668,7 @@ function moveEditor(p) {
   const tmPrice = id => 100 + Math.round((M()[id].bp || 40) * 3);
   const draw = () => {
     $('#modalContent').innerHTML = `<h2 id="modalTitle">${esc(sp(p).name)}'s moves</h2><p>Choose up to four. Level-up moves up to Lv. ${p.level} are free to relearn; TM moves can be taught for coins.</p>
-      <div class="move-list">${pool.map(id => `<label class="move-row" style="cursor:pointer"><input type="checkbox" data-mv="${id}" ${chosen.includes(id) ? 'checked' : ''} style="min-height:0"> ${moveRow(id).replace(/^<div class="move-row">|<\/div>$/g, '')}</label>`).join('')}</div>
+      <div class="move-list">${pool.map(id => `<label class="move-row pick"><input type="checkbox" class="tick" data-mv="${id}" ${chosen.includes(id) ? 'checked' : ''} aria-label="Use ${esc(M()[id]?.name || id)}">${moveRow(id).replace(/^<div class="move-row">|<\/div>$/g, '')}</label>`).join('')}</div>
       ${tms.length ? `<details style="margin-top:12px"><summary class="btn ghost small">Teach a TM (${tms.length} available)</summary><div class="move-list" style="margin-top:8px">${tms.map(id => `<div class="move-row"><span class="type ${tclass(M()[id].type)}">${esc(M()[id].type)}</span><span><b>${esc(M()[id].name)}</b><br><small>${esc(M()[id].desc || '')}</small></span><button class="btn small primary" data-tm="${id}">${ic('coin')}${tmPrice(id)}</button></div>`).join('')}</div></details>` : ''}
       <div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="movesOk">Save moves (${chosen.length}/4)</button></div>`;
     $$('#modalContent [data-mv]').forEach(c => c.onchange = () => {
@@ -1201,7 +1201,11 @@ function startBattle(tier, step) {
     const b = E.createBattle({ player: { name: trainerName(), team: buildPlayerTeam() }, enemy: { name: trainer.name, team: trainer.team }, seed, ai: tier === 'journey' ? trainer.ai : G.DAILY_TIERS[tier].ai, label: trainer.name });
     if (!isFree(tier)) { save.daily[tier] = { result: 'pending', date: key }; persist(); }
     battleState = { b, tier, step, trainer, ui: { p: null, e: null }, tera: false, menu: 'main', playing: false, ko: [], startedTurn: 1, itemsUsed: 0 };
-    setupArena(tier === 'journey' ? JOURNEY_LIGHT[step.kind] : tier);
+    // Arena art follows the scenario: a Gym Leader's type in Journey (the road to a
+    // gym uses that gym's ground), or today's weather for daily and practice battles.
+    const sceneType = tier === 'journey' ? (step.leader || J.REGIONS[step.region].gyms[step.gym]).type : null;
+    const arenaKey = sceneType ? assets.typeArenas?.[sceneType] : assets.weatherArenas?.[G.dailyWeather(key).id];
+    setupArena(tier === 'journey' ? JOURNEY_LIGHT[step.kind] : tier, arenaKey);
     $('#battleLabel').textContent = tier === 'practice' ? 'Practice' : tier === 'journey' ? J.REGIONS[step.region].name + ' · ' + stepLabel(step) : 'Daily · ' + G.DAILY_TIERS[tier].name;
     $('#battleLog').textContent = '';
     $('#battleControls').innerHTML = '';
@@ -1215,10 +1219,10 @@ function startBattle(tier, step) {
   else confirmBox('Daily battle · ' + G.DAILY_TIERS[tier].name, `You get <b>one attempt</b> per day. Leaving or reloading during the battle counts as a loss. Your party of ${partyMons().length} will battle ${G.DAILY_TIERS[tier].size} Pokémon.`, 'Battle!', begin);
 }
 // Places sprites on the painted platforms of the arena art (positions from assets/manifest.json).
-function setupArena(tier) {
+function setupArena(tier, arenaKey) {
   const arena = $('#battlefield');
   const cfg = assets.tiers?.[tier] || {};
-  const art = assets.arenas?.[cfg.arena];
+  const art = assets.arenas?.[arenaKey] || assets.arenas?.[cfg.arena];
   arena.className = 'arena theme-' + tier + ' light-' + (cfg.light || 'day') + (art ? ' has-art' : '');
   arena.style.setProperty('--arena-bg', art ? `url("assets/backgrounds/${art.file}")` : 'none');
   const foe = art?.foe || { x: 76, y: 58, w: 26 }, me = art?.player || { x: 28, y: 92, w: 40 };
@@ -1320,6 +1324,87 @@ function anim(sel, cls) {
   const el = $(sel); el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
   setTimeout(() => el.classList.remove(cls), 600);
 }
+// ---------- Move animations ----------
+// Physical moves wind up and dash at the target; special moves fire a
+// type-coloured orb; status moves raise an aura. Hits land with a burst in the
+// move's type colour and knock the target back. No screen flashes.
+const fxOn = () => save.settings.animations && !save.settings.reducedEffects && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const spriteEl = side => side === 'p' ? $('#playerSprite') : $('#enemySprite');
+const typeColor = t => `var(--t-${String(t || 'normal').toLowerCase()})`;
+function spriteCentre(side) {
+  const a = $('#battlefield').getBoundingClientRect(), r = spriteEl(side).getBoundingClientRect();
+  return { x: r.left - a.left + r.width / 2, y: r.top - a.top + r.height * 0.55, h: r.height };
+}
+function fxNode(cls, x, y, color, extra = '') {
+  const el = document.createElement('div');
+  el.className = 'fx ' + cls;
+  el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--c', color);
+  el.innerHTML = extra;
+  $('#battleFlash').appendChild(el);
+  return el;
+}
+async function moveFx(ev) {
+  if (!fxOn()) { await sleep(180); return; }
+  const user = ev.side, foe = user === 'p' ? 'e' : 'p', el = spriteEl(user);
+  const from = spriteCentre(user), to = spriteCentre(foe), dx = to.x - from.x, dy = to.y - from.y;
+  const color = typeColor(ev.type);
+  if (ev.cat === 'Physical') {
+    el.animate([
+      { transform: 'none' },
+      { transform: `translate(${-dx * 0.07}px,${-dy * 0.07}px) scale(1.06,.92)`, offset: 0.3 },
+      { transform: `translate(${dx * 0.42}px,${dy * 0.42}px) scale(.95,1.06)`, offset: 0.62 },
+      { transform: `translate(${dx * 0.36}px,${dy * 0.36}px)`, offset: 0.72 },
+      { transform: 'none' },
+    ], { duration: 620, easing: 'cubic-bezier(.3,0,.3,1)' });
+    await sleep(380);
+  } else if (ev.cat === 'Special') {
+    el.animate([{ transform: 'none' }, { transform: 'translateY(-6%) scale(1.05)', offset: 0.4 }, { transform: 'none' }], { duration: 560, easing: 'ease-out' });
+    auraFx(user, ev.type);
+    await sleep(160);
+    const orb = fxNode('fx-orb', from.x, from.y, color);
+    const lift = -Math.max(40, Math.abs(dx) * 0.18);
+    const fly = orb.animate([
+      { transform: 'translate(-50%,-50%) scale(.4)', opacity: 0 },
+      { transform: `translate(calc(-50% + ${dx * 0.5}px),calc(-50% + ${dy * 0.5 + lift}px)) scale(1)`, opacity: 1, offset: 0.5 },
+      { transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(1.25)`, opacity: 1 },
+    ], { duration: 420, easing: 'cubic-bezier(.4,0,.6,1)' });
+    // A short trail of fading copies follows the orb.
+    for (let i = 1; i <= 3; i++) setTimeout(() => {
+      if (!orb.isConnected) return;
+      const t = fxNode('fx-orb trail', from.x, from.y, color);
+      t.animate(fly.effect.getKeyframes(), { duration: 420, easing: 'cubic-bezier(.4,0,.6,1)' }).onfinish = () => t.remove();
+    }, i * 45);
+    fly.onfinish = () => orb.remove();
+    await sleep(400);
+  } else {
+    auraFx(user, ev.type);
+    el.animate([{ transform: 'none' }, { transform: 'translateY(-4%)', offset: 0.35 }, { transform: 'none' }], { duration: 600, easing: 'ease-in-out' });
+    await sleep(520);
+  }
+}
+function impactFx(side, type, big) {
+  if (!fxOn()) return;
+  const c = spriteCentre(side), color = typeColor(type);
+  const shards = Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36 + (i % 2) * 14}deg;--d:${big ? 1.35 : 1}"></i>`).join('');
+  const burst = fxNode('fx-burst' + (big ? ' big' : ''), c.x, c.y, color, '<b></b><b></b><s></s>' + shards);
+  burst.style.setProperty('--s', Math.max(130, Math.min(240, c.h * 1.4)) * (big ? 1.25 : 1) + 'px');
+  setTimeout(() => burst.remove(), 700);
+  const away = side === 'e' ? 1 : -1;
+  spriteEl(side).animate([
+    { transform: 'none' },
+    { transform: `translate(${away * 7}%,${-away * 2}%) rotate(${away * 6}deg)`, offset: 0.18 },
+    { transform: `translate(${-away * 3}%,0) rotate(${-away * 3}deg)`, offset: 0.45 },
+    { transform: `translate(${away * 2}%,0)`, offset: 0.7 },
+    { transform: 'none' },
+  ], { duration: 460, easing: 'ease-out' });
+}
+function auraFx(side, type, crystal) {
+  if (!fxOn()) return;
+  const c = spriteCentre(side);
+  const a = fxNode('fx-aura' + (crystal ? ' crystal' : ''), c.x, c.y + c.h * 0.4, typeColor(type), '<b></b><b></b><b></b>');
+  a.style.setProperty('--s', Math.max(120, Math.min(240, c.h * 1.3)) + 'px');
+  setTimeout(() => a.remove(), 1000);
+}
 async function say(text) { $('#battleLog').textContent = text; await sleep(420 + Math.min(900, text.length * 16)); }
 async function playEvents(events) {
   const st = battleState;
@@ -1333,17 +1418,17 @@ async function playEvents(events) {
       case 'switch':
         st.ui[side] = { name: ev.name, level: ev.level, hp: ev.hp, maxhp: ev.maxhp, status: ev.status, gender: ev.gender, tera: ev.tera, num: ev.num, shiny: ev.shiny };
         setSprite(side, ev); renderStatusCard(side); if (side === 'e') renderFoeTeam(); await sleep(250); break;
-      case 'move': anim(side === 'p' ? '#playerSprite' : '#enemySprite', 'attack'); await sleep(180); break;
+      case 'move': st.lastMove = ev; await moveFx(ev); break;
       case 'damage':
         if (st.ui[side]) { st.ui[side].hp = ev.hp; }
-        if (!ev.indirect) { anim(side === 'p' ? '#playerSprite' : '#enemySprite', 'hit'); if (ev.crit || ev.eff > 1) { anim('#battlefield', 'shake'); anim('#battleFlash', 'flash'); } }
+        if (!ev.indirect) { impactFx(side, st.lastMove?.type, ev.crit || ev.eff > 1); if (ev.crit || ev.eff > 1) anim('#battlefield', 'shake'); }
         renderStatusCard(side); await sleep(520); break;
       case 'heal': if (st.ui[side]) st.ui[side].hp = ev.hp; renderStatusCard(side); await sleep(380); break;
       case 'revive': break;
       case 'status': if (st.ui[side] && (ev.idx === undefined || monView(side)?.idx === ev.idx)) { st.ui[side].status = ev.status; renderStatusCard(side); } break;
       case 'boost': renderStatusCard(side); break;
       case 'faint': (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.add('gone'); if (side === 'e') renderFoeTeam(); await sleep(520); break;
-      case 'tera': if (st.ui[side]) st.ui[side].tera = ev.type; (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.add('tera'); anim('#battleFlash', 'flash'); renderStatusCard(side); await sleep(600); break;
+      case 'tera': if (st.ui[side]) st.ui[side].tera = ev.type; (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.add('tera'); auraFx(side, ev.type, true); renderStatusCard(side); await sleep(600); break;
       case 'charge': (side === 'p' ? $('#playerSprite') : $('#enemySprite')).classList.toggle('semi', !!ev.semi); break;
       case 'weather': case 'terrain': case 'side': case 'field': renderFieldChips(); break;
       case 'sub': renderStatusCard(side); break;
@@ -1694,6 +1779,8 @@ async function loadAssetManifest() {
     assets.backgrounds = m.backgrounds || {};
     assets.arenas = m.arenas || {};
     assets.tiers = m.tiers || {};
+    assets.typeArenas = m.typeArenas || {};
+    assets.weatherArenas = m.weatherArenas || {};
     for (const a of Object.values(assets.arenas)) if (a?.file) preload('assets/backgrounds/' + a.file);
     if (assets.backgrounds.home) document.body.style.setProperty('--home-bg', `url("assets/backgrounds/${assets.backgrounds.home}")`);
   } catch (e) { /* artwork is optional */ }

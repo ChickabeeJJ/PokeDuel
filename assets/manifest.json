@@ -1,19 +1,92 @@
 {
-  "_comment": "Optional artwork registry. Only files named here are requested. Arena platform positions are percentages of the image (x/y = centre of the painted platform, w = its width). See ASSET_REQUESTS.md.",
+  "_comment": "Optional artwork registry. Only files named here are requested. Arena platform positions are percentages of the image (x/y = centre of the painted platform, w = its width). See ASSET_REQUESTS.md. Journey battles pick an arena from the Gym Leader's type (typeArenas); daily and practice battles pick one from the daily weather (weatherArenas).",
   "backgrounds": {
     "home": null
   },
   "arenas": {
     "field": {
       "file": "battle-field.webp",
-      "foe": { "x": 78.7, "y": 60.5, "w": 31.4 },
-      "player": { "x": 31.6, "y": 79.5, "w": 52.2 }
+      "foe": {
+        "x": 78.7,
+        "y": 60.5,
+        "w": 31.4
+      },
+      "player": {
+        "x": 31.6,
+        "y": 79.5,
+        "w": 52.2
+      }
+    },
+    "rock": {
+      "file": "arena-rock.webp",
+      "foe": {
+        "x": 78.8,
+        "y": 60.3,
+        "w": 31.4
+      },
+      "player": {
+        "x": 31.8,
+        "y": 79.2,
+        "w": 51.9
+      }
+    },
+    "sea": {
+      "file": "arena-sea.webp",
+      "foe": {
+        "x": 78.5,
+        "y": 59.8,
+        "w": 33.2
+      },
+      "player": {
+        "x": 31.9,
+        "y": 79.5,
+        "w": 53.3
+      }
+    },
+    "snow": {
+      "file": "arena-snow.webp",
+      "foe": {
+        "x": 79.0,
+        "y": 59.8,
+        "w": 31.8
+      },
+      "player": {
+        "x": 32.1,
+        "y": 79.2,
+        "w": 52.8
+      }
     }
   },
   "tiers": {
-    "easy": { "arena": "field", "light": "day" },
-    "practice": { "arena": "field", "light": "day" },
-    "medium": { "arena": "field", "light": "dusk" },
-    "hard": { "arena": "field", "light": "night" }
+    "easy": {
+      "arena": "field",
+      "light": "day"
+    },
+    "practice": {
+      "arena": "field",
+      "light": "day"
+    },
+    "medium": {
+      "arena": "field",
+      "light": "dusk"
+    },
+    "hard": {
+      "arena": "field",
+      "light": "night"
+    }
+  },
+  "typeArenas": {
+    "Rock": "rock",
+    "Ground": "rock",
+    "Fighting": "rock",
+    "Steel": "rock",
+    "Dragon": "rock",
+    "Water": "sea",
+    "Ice": "snow"
+  },
+  "weatherArenas": {
+    "snow": "snow",
+    "blizzard": "snow",
+    "sandstorm": "rock"
   }
 }
