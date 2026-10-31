@@ -505,6 +505,7 @@ button.cell:hover{background:rgba(5,60,80,.75)}
 .battle-sprite{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;object-position:bottom;transform-origin:50% 100%;filter:drop-shadow(0 10px 8px rgba(0,0,0,.35));transition:opacity .3s,translate .3s;animation:breathe 3.4s ease-in-out infinite}
 .battle-sprite.foe{animation-delay:-1.7s}
 .battle-sprite.flip{scale:-1 1}
+.battle-sprite.pixel{width:auto;height:auto;max-width:none;max-height:none;image-rendering:pixelated;filter:drop-shadow(0 6px 4px rgba(0,0,0,.35))}
 @keyframes breathe{50%{transform:scaleY(1.025) translateY(-1%)}}
 .battle-sprite.gone{opacity:0;translate:0 30px}
 .battle-sprite.hit{animation:hit .45s}

@@ -1102,18 +1102,36 @@ function renderFieldChips() {
   }
   $('#fieldChips').innerHTML = out.map(x => `<span>${esc(x)}</span>`).join('');
 }
+// Like the original games: your Pokémon is shown from behind, the opponent from the front.
+// Animated Showdown sprites (both sides, same art style) with static fallbacks for
+// species they don't cover; pixel art is scaled by whole numbers so it stays crisp.
 function setSprite(side, ev) {
-  // HOME renders are high resolution and match the painted arenas; the player's is mirrored to face the foe.
   const el = side === 'p' ? $('#playerSprite') : $('#enemySprite');
   const front = side === 'e';
-  el.dataset.fb = [img.art(ev.num, false), front ? img.front(ev.num, ev.shiny) : img.back(ev.num, ev.shiny), img.icon(ev.num, ev.shiny)].join('|');
+  const stat = (s) => `${SPR}/pokemon/${front ? '' : 'back/'}${s ? 'shiny/' : ''}${ev.num}.png`;
+  const primary = front ? img.front(ev.num, ev.shiny) : img.back(ev.num, ev.shiny);
+  el.dataset.fb = [front ? img.front(ev.num, false) : img.back(ev.num, false), stat(ev.shiny), stat(false), img.art(ev.num, ev.shiny)].join('|');
   el.style.visibility = '';
   el.alt = ev.name;
-  el.className = 'battle-sprite ' + (front ? 'foe' : 'mine') + ' gone';
-  el.onload = () => el.classList.toggle('flip', !front && el.src.includes('/home/'));
-  el.src = img.art(ev.num, ev.shiny);
+  el.className = 'battle-sprite pixel ' + (front ? 'foe' : 'mine') + ' gone';
+  el.style.width = el.style.height = '';
+  el.onload = () => fitSprite(el, side);
+  el.src = primary;
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('gone')));
 }
+function fitSprite(el, side) {
+  const hd = el.src.includes('/home/');
+  el.classList.toggle('pixel', !hd);
+  el.classList.toggle('flip', hd && side === 'p');
+  if (hd || !el.naturalHeight) { el.style.width = el.style.height = ''; return; }
+  const slot = el.parentElement.getBoundingClientRect();
+  // Static 96px sprites have empty padding; animated ones are cropped tight.
+  const fill = /\.gif$/.test(el.src) ? (side === 'p' ? 0.56 : 0.7) : 0.9;
+  const scale = Math.max(1, Math.floor((slot.width * fill) / Math.max(el.naturalWidth, el.naturalHeight) * 2) / 2);
+  el.style.width = el.naturalWidth * scale + 'px';
+  el.style.height = el.naturalHeight * scale + 'px';
+}
+window.addEventListener('resize', () => { for (const [id, side] of [['#playerSprite', 'p'], ['#enemySprite', 'e']]) { const el = $(id); if (el?.complete && el.src) fitSprite(el, side); } });
 function anim(sel, cls) {
   if (!save.settings.animations || save.settings.reducedEffects) return;
   const el = $(sel); el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
