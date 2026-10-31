@@ -795,7 +795,7 @@ body{background:
 /* Equal side columns keep the nav centred on the screen, whatever the wallet and trainer widths. */
 .hud{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
 .hud-left{display:flex;align-items:center;gap:16px;min-width:0}
-.hud-trainer{justify-self:end}
+
 /* Profile cards and the Pokémon summary use plain rectangular buttons. */
 .card .btn,.sum-actions .btn{clip-path:none}
 .card .btn:not(.primary):not(.danger),.sum-actions .btn:not(.primary):not(.danger){background:linear-gradient(180deg,#4b505a,#30343b);box-shadow:inset 0 0 0 1px var(--edge-hi)}
@@ -808,7 +808,7 @@ body{background:
    The body is a column so the strip sits at the bottom of short pages. */
 body{display:flex;flex-direction:column}
 main{flex:1 0 auto}
-#parade{position:relative;flex:none;width:100%;height:130px;overflow:hidden;pointer-events:none}
+#parade{position:relative;flex:none;width:100%;height:92px;overflow:hidden;pointer-events:none}
 body.in-battle #parade{display:none}
 .wanderer{position:absolute;left:0;bottom:0;will-change:transform}
 .wanderer img{display:block;image-rendering:pixelated;filter:drop-shadow(0 3px 2px rgba(0,0,0,.45))}
@@ -899,18 +899,23 @@ input[type=range]:focus-visible::-webkit-slider-thumb{outline:3px solid var(--li
 input[type=range]:focus-visible::-moz-range-thumb{outline:3px solid var(--lime)}
 input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 
-/* ---------- HUD wallet ---------- */
-.hud-wallet{display:flex;gap:0;background:linear-gradient(180deg,#2d3138,#1a1c20);box-shadow:inset 0 0 0 1px var(--edge),0 4px 14px rgba(0,0,0,.35)}
-.wal{display:flex;align-items:center;gap:10px;padding:6px 16px 6px 8px;transform-origin:50% 50%}
-.wal+.wal{box-shadow:inset 1px 0 0 var(--edge)}
-.wal-ic{display:grid;place-items:center;width:36px;height:36px;background:radial-gradient(circle at 50% 35%,rgba(255,255,255,.16),rgba(0,0,0,.35) 70%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
-.wal.tp .wal-ic{box-shadow:inset 0 0 0 1px rgba(126,240,255,.45),0 0 12px rgba(126,240,255,.18)}
-.wal.coin .wal-ic{box-shadow:inset 0 0 0 1px rgba(255,216,74,.5),0 0 12px rgba(255,216,74,.18)}
-.wal-ic .ic{width:24px;height:24px}
+/* ---------- HUD wallet ----------
+   Sits beside the profile as a chain of separate plates that share the
+   profile's "/" slant: TP (straight left, slanted right), coins (slanted both
+   sides), then the profile (slanted left). Small gaps keep them apart. */
+.hud-right{display:flex;align-items:center;gap:6px;justify-self:end}
+.hud-wallet{display:flex;gap:6px}
+.wal{display:flex;align-items:center;gap:9px;height:50px;padding:0 24px 0 10px;background:var(--panel-2);transform-origin:50% 50%}
+.wal.tp{clip-path:polygon(0 0,100% 0,calc(100% - 12px) 100%,0 100%)}
+.wal.coin{padding-left:22px;clip-path:polygon(12px 0,100% 0,calc(100% - 12px) 100%,0 100%)}
+.wal-ic{display:grid;place-items:center;width:32px;height:32px;background:rgba(0,0,0,.28)}
+.wal-ic .ic{width:22px;height:22px}
 .wal-txt{display:grid;line-height:1}
-.wal-txt b{font:800 1.3rem/1 var(--display);font-style:italic;letter-spacing:.02em;font-variant-numeric:tabular-nums;color:#fff}
-.wal-txt small{white-space:nowrap;margin-top:3px;font:800 .62rem/1 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wal-txt b{font:800 1.2rem/1 var(--display);font-style:italic;letter-spacing:.02em;font-variant-numeric:tabular-nums;color:#fff}
+.wal-txt small{white-space:nowrap;margin-top:3px;font:800 .6rem/1 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .wal.coin .wal-txt b{color:#ffe27a}
+@media (max-width:1799px){.hud{grid-template-columns:auto minmax(0,1fr) auto}}
+@media (max-width:440px){.wal{height:42px;padding:0 18px 0 6px;gap:6px}.wal.coin{padding-left:16px}.wal-ic{width:26px;height:26px}.wal-ic .ic{width:18px;height:18px}.wal-txt b{font-size:1rem}.wal-txt small{display:none}.hud-right{gap:4px}.hud-wallet{gap:4px}}
 /* Badges on top tabs. */
 .hud-link{position:relative}
 .nav-badge{display:inline-block;margin-left:6px;vertical-align:2px;min-width:18px;padding:2px 5px;background:#e8336d;color:#fff;font:800 .64rem/1.1 var(--font);font-style:normal;letter-spacing:.04em;text-align:center;text-transform:uppercase}
@@ -921,7 +926,15 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 /* ---------- Trainer profiles and friends ---------- */
 .rank-row[data-trainer],.friend-row{cursor:pointer;transition:transform .12s,filter .12s}
 .rank-row[data-trainer]:hover,.friend-row:hover{transform:translateX(4px);filter:brightness(1.12)}
-.profile-main{display:grid;gap:16px;min-width:0}
+.profile-layout{align-items:stretch}
+/* Both columns end on the same line: the friends card and the last settings card grow to fill. */
+.profile-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.profile-main .friends-card{flex:1;display:flex;flex-direction:column}
+.friends-card .friend-list{flex:1;align-content:start}
+.friends-card>.empty{flex:1;display:grid;place-content:center;padding:18px}
+.profile-side{display:flex;flex-direction:column}
+.profile-side>.card:last-child{flex:1}
+
 .friends-card .friend-tools{display:grid;gap:10px;margin-bottom:14px}
 .friend-code{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 1px var(--edge)}
 .friend-code small{font:800 .7rem/1 var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -975,7 +988,7 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   :root{--hud-h:auto}
   .hud{display:flex;flex-wrap:wrap;height:auto;padding-top:10px;padding-bottom:10px}
   .hud-nav{order:3;flex-basis:100%;justify-content:center;overflow-x:auto;scrollbar-width:none}
-  .hud-trainer{margin-left:auto}
+  .hud-right{margin-left:auto}
 }
 @media (max-width:820px){
   :root{--hud-h:auto}

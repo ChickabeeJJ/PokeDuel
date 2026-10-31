@@ -1957,14 +1957,14 @@ function spawnWanderer() {
   const rightward = Math.random() < 0.5;
   const el = document.createElement('div');
   el.className = 'wanderer ' + (flies ? 'fly' : 'walk');
-  const lift = flies ? 24 + Math.random() * 40 : 0;
+  const lift = flies ? 16 + Math.random() * 30 : 0;
   const im = new Image();
   im.alt = ''; im.decoding = 'async'; im.crossOrigin = 'anonymous';
   im.onerror = () => el.remove();
   im.onload = () => {
     if (!el.isConnected) return;
     // Scale by real species height (Joltik small, Wailord big), measured on the visible pixels.
-    const b = spriteBox(im), targetH = Math.max(40, Math.min(110, 52 * Math.sqrt(d.ht || 1)));
+    const b = spriteBox(im), targetH = Math.max(40, Math.min(84, 50 * Math.sqrt(d.ht || 1)));
     const k = targetH / b.h;
     im.style.width = Math.round(im.naturalWidth * k) + 'px';
     im.style.marginBottom = -Math.round((im.naturalHeight - b.y - b.h) * k) + 'px';

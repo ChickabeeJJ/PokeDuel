@@ -28,10 +28,6 @@
 <header class="hud" id="hud" hidden>
   <div class="hud-left">
   <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
-  <div class="hud-wallet">
-    <span class="wal tp" title="Trainer points"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg></span><span class="wal-txt"><b id="hudScore">0</b><small>Trainer pts</small></span></span>
-    <span class="wal coin" title="Coins"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg></span><span class="wal-txt"><b id="coins">0</b><small>Coins</small></span></span>
-  </div>
   </div>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
@@ -45,10 +41,16 @@
     <button data-go="medals" class="hud-link">Medals</button>
     <button data-go="leaderboard" class="hud-link">Ranks</button>
   </nav>
+  <div class="hud-right">
+  <div class="hud-wallet">
+    <span class="wal tp" title="Trainer points"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg></span><span class="wal-txt"><b id="hudScore">0</b><small>Trainer pts</small></span></span>
+    <span class="wal coin" title="Coins"><span class="wal-ic"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg></span><span class="wal-txt"><b id="coins">0</b><small>Coins</small></span></span>
+  </div>
   <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">
     <img id="hudAvatar" alt="" width="40" height="40">
     <span><b id="hudName">Trainer</b><small id="hudRank">Rank</small></span>
   </button>
+  </div>
 </header>
 
 <main id="app">
@@ -140,7 +142,7 @@
           <div class="row-btns"><button id="resetSave" class="btn danger">Reset local save</button></div>
         </section>
       </div>
-    </div>
+</div>
   </section>
 
   <section id="screen-medals" class="screen screen-profile" data-screen="medals">

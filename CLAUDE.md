@@ -13,7 +13,7 @@ PokeDuel is a browser-based daily Pokémon battle simulator. The long-term direc
 ## 2. Repository and technical constraints
 
 Repository: `ChickabeeJJ/PokeDuel`  
-Production: `https://pokeduel-henna.vercel.app/`
+Production: `https://pokemonduel.vercel.app/`
 
 This is a **static vanilla HTML/CSS/JavaScript project**, not React, Next.js, Vite, or a build-tool project.
 
