@@ -59,10 +59,12 @@ let failures = 0;
     await page.click('#modal:not(.hidden) [data-close]');
     await page.waitForSelector('#claimCheckin', { state: 'visible', timeout: 4000 });
     await shot('03-checkin');
+    // The starter can roll a mark and earn a medal, so measure the check-in itself.
+    const before = (await save()).coins;
     await page.click('#claimCheckin');
     await page.waitForTimeout(400);
     const s = await save();
-    if (s.checkin.streak !== 1 || s.coins !== 360) throw new Error('checkin ' + s.checkin.streak + ' ' + s.coins);
+    if (s.checkin.streak !== 1 || s.coins - before !== 60) throw new Error('checkin ' + s.checkin.streak + ' ' + before + '->' + s.coins);
   });
   await step('home: three daily rows, team strip, shortcuts', async () => {
     await closeModals();
@@ -194,10 +196,21 @@ let failures = 0;
     await page.waitForTimeout(600);
     const s = await save(); if (s.integrity.status !== 'ok' || s.box.length !== 2) throw new Error('import result');
   });
+  await step('journey: Kanto is open, Route 1 starts a battle and leaving returns to Journey', async () => {
+    await page.goto(URL + '#/journey'); await page.waitForSelector('#journeyBody .jrow', { timeout: 15000 }); await closeModals();
+    if (await page.locator('#journeyRegions [data-jregion]:not([disabled])').count() < 1) throw new Error('no region open');
+    if (await page.locator('#journeyBody .jrow').count() !== 21) throw new Error('Kanto should have 21 steps');
+    await page.click('#journeyBody [data-jstep="0"]');
+    await page.waitForSelector('#battleControls [data-cmd="run"]', { timeout: 30000 });
+    if (!/Kanto/.test(await page.textContent('#battleLabel'))) throw new Error('label');
+    await page.click('#battleControls [data-cmd="run"]'); await page.click('#confirmOk');
+    await page.waitForSelector('#modal:not(.hidden) [data-close]'); await page.click('#modal:not(.hidden) [data-close]');
+    await page.waitForSelector('#screen-journey.active', { timeout: 10000 });
+  });
   await step('medals', async () => { await page.goto(URL + '#/medals'); await page.waitForSelector('.medal', { timeout: 15000 }); });
   await step('no horizontal scroll at 390px on any screen', async () => {
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const s of ['home', 'boxes', 'shop', 'bag', 'dex', 'leaderboard', 'profile', 'medals']) {
+    for (const s of ['home', 'journey', 'boxes', 'shop', 'bag', 'dex', 'leaderboard', 'profile', 'medals']) {
       await page.goto(URL + '#/' + s); await page.waitForTimeout(900); await closeModals();
       const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       await page.screenshot({ path: OUT + 'm-' + s + '.png' });

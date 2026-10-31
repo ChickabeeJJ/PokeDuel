@@ -369,7 +369,8 @@ function showModal(html, { wide = false, onClose = null, locked = false } = {}) 
   $('#modal').dataset.locked = locked ? '1' : '';
   $('#modalClose').hidden = locked;
   modalOnClose = onClose;
-  setTimeout(() => ($('#modalContent [autofocus]') || $('#modalContent button') || $('#modalClose')).focus?.(), 30);
+  // Don't steal focus if the player (or a test) already focused a field in the dialog.
+  setTimeout(() => { if ($('#modal').contains(document.activeElement)) return; ($('#modalContent [autofocus]') || $('#modalContent button') || $('#modalClose')).focus?.(); }, 30);
 }
 function closeModal(force) {
   if ($('#modal').dataset.locked && !force) return;
@@ -778,7 +779,7 @@ function dailyDeal() {
 }
 const priceOf = id => { const it = G.ITEMS[id]; return id === dailyDeal() ? Math.round(it.price * 0.7) : it.price; };
 function shopEntries(cat) {
-  if (cat === 'boxes') return Object.keys(G.BOXES).map(k => ({ id: 'box:' + k, box: k, name: G.BOXES[k].name, price: G.BOXES[k].price }));
+  if (cat === 'boxes') return Object.keys(G.BOXES).map(k => ({ id: 'box:' + k, box: k, name: G.BOXES[k].name, price: G.BOXES[k].price })).sort((a, b) => a.price - b.price);
   return Object.values(G.ITEMS).filter(i => i.cat === cat && !i.notForSale).map(i => ({ id: i.id, name: i.name, price: priceOf(i.id) }));
 }
 function boxArt(k) { return k === 'outbreak' ? D()[G.dailyOutbreak(G.todayKey())].num : G.BOXES[k].art; }
@@ -799,7 +800,41 @@ function renderShop() {
   }).join('');
   $('#shopMain').innerHTML = features + `<div class="section-title"><h2>${SHOP_CATS[ui.shopCat][0]}</h2><span class="tag">${list.length} items</span></div><ul class="item-grid">${cards}</ul>`;
   renderShopDetail();
+  if (ui.shopCat === 'boxes') startBoxCycle();
   updateHud();
+}
+// Selecting an item only moves the highlight and redraws the detail panel, so the
+// grid's images aren't rebuilt (rebuilding them made the screen flicker).
+function selectShopItem(id) {
+  ui.shopSel = id; ui.shopQty = 1;
+  $$('#shopMain [data-shopsel], #shopMain [data-feature]').forEach(b => b.classList.toggle('on', (b.dataset.shopsel || b.dataset.feature) === id));
+  renderShopDetail();
+}
+// Each box tile cycles through Pokémon from its own pool every 3 seconds.
+let boxCycleTimer = null;
+function startBoxCycle() {
+  clearInterval(boxCycleTimer);
+  if (save.settings.reducedEffects) return;
+  let tick = 0;
+  boxCycleTimer = setInterval(() => {
+    const cards = $$('#shopMain .box-card');
+    if (activeScreen !== 'shop' || !cards.length) { clearInterval(boxCycleTimer); boxCycleTimer = null; return; }
+    if (document.hidden) return;
+    tick++;
+    cards.forEach((card, i) => {
+      const k = card.dataset.shopsel.slice(4);
+      if (k === 'outbreak') return;
+      const pool = G.BOXES[k].odds.flatMap(o => G.boxPool(o[2]));
+      const n = D()[pool[Math.floor(Math.random() * pool.length)]].num;
+      const imgEl = card.querySelector('.tile img'); if (!imgEl) return;
+      const next = new Image(); next.src = img.art(n, false);
+      // Stagger the swaps so the grid ripples instead of changing all at once.
+      setTimeout(() => next.decode().then(() => {
+        imgEl.classList.add('swap');
+        setTimeout(() => { imgEl.src = next.src; imgEl.removeAttribute('data-fb'); imgEl.classList.remove('swap'); }, 220);
+      }).catch(() => {}), (i % 7) * 120);
+    });
+  }, 3000);
 }
 function renderShopDetail() {
   const el = $('#shopDetail');
@@ -839,7 +874,10 @@ function buyItem(id) {
   if (!spendCoins(total)) { toast('Not enough coins.'); return; }
   if (it.key) save.keyItems[id] = true;
   else save.inventory[id] = (save.inventory[id] || 0) + qty;
-  afterProgress(); renderShop();
+  afterProgress();
+  const card = $(`#shopMain [data-shopsel="${id}"]`);
+  if (card) { let own = card.querySelector('.own'); if (!own) { own = document.createElement('span'); own.className = 'own'; card.prepend(own); } own.textContent = it.key ? 'Owned' : '×' + save.inventory[id]; }
+  renderShopDetail(); updateHud();
   toast('Bought ' + (qty > 1 ? qty + '× ' : '') + it.name + '!');
 }
 // ---------- Boxes (lootboxes) ----------
@@ -1205,23 +1243,54 @@ function setSprite(side, ev) {
   el.dataset.fb = [front ? img.front(ev.num, false) : img.back(ev.num, false), stat(ev.shiny), stat(false), img.art(ev.num, ev.shiny)].join('|');
   el.style.visibility = '';
   el.alt = ev.name;
+  el.dataset.num = ev.num;
   el.className = 'battle-sprite pixel ' + (front ? 'foe' : 'mine') + ' gone';
   el.style.width = el.style.height = '';
+  el.crossOrigin = 'anonymous';
   el.onload = () => fitSprite(el, side);
   el.src = primary;
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('gone')));
 }
+// Measures the visible (non-transparent) part of a sprite's first frame, because
+// sprite canvases carry very different amounts of empty padding.
+const spriteBoxes = new Map();
+function spriteBox(el) {
+  if (spriteBoxes.has(el.src)) return spriteBoxes.get(el.src);
+  let box = null;
+  try {
+    const w = el.naturalWidth, h = el.naturalHeight, c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(el, 0, 0);
+    const a = g.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (a[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 >= 0) box = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  } catch { /* cross-origin image without CORS: fall back to the full canvas */ }
+  box = box || { x: 0, y: 0, w: el.naturalWidth, h: el.naturalHeight };
+  spriteBoxes.set(el.src, box);
+  return box;
+}
+// Sizes every sprite to its platform: bigger species stand taller, but nothing
+// spills off the platform or shrinks to a speck. Pixel art keeps half-step scales.
 function fitSprite(el, side) {
   const hd = el.src.includes('/home/');
   el.classList.toggle('pixel', !hd);
   el.classList.toggle('flip', hd && side === 'p');
+  el.style.marginBottom = el.style.left = '';
   if (hd || !el.naturalHeight) { el.style.width = el.style.height = ''; return; }
   const slot = el.parentElement.getBoundingClientRect();
-  // Static 96px sprites have empty padding; animated ones are cropped tight.
-  const fill = /\.gif$/.test(el.src) ? (side === 'p' ? 0.56 : 0.95) : (side === 'p' ? 0.9 : 1.1);
-  const scale = Math.max(1, Math.floor((slot.width * fill) / Math.max(el.naturalWidth, el.naturalHeight) * 2) / 2);
+  const P = slot.width / (side === 'p' ? 0.6 : 0.72); // painted platform width
+  const b = spriteBox(el);
+  const ht = D()[G.gameData.numToId[+el.dataset.num]]?.ht ?? 1;
+  const t = Math.max(0, Math.min(1, (Math.log2(Math.max(0.1, ht)) + 1.5) / 4));
+  let scale = P * (side === 'p' ? 0.3 + 0.36 * t : 0.36 + 0.34 * t) / Math.max(b.h, b.w * 0.8);
+  scale = Math.min(scale, P * 0.78 / b.w, P * (side === 'p' ? 0.78 : 0.92) / b.h);
+  scale = Math.max(0.5, Math.floor(scale * 2) / 2);
   el.style.width = el.naturalWidth * scale + 'px';
   el.style.height = el.naturalHeight * scale + 'px';
+  // Stand the visible feet on the platform centre and centre the body horizontally.
+  el.style.marginBottom = -Math.round((el.naturalHeight - b.y - b.h) * scale) + 'px';
+  el.style.left = -Math.round((b.x + b.w / 2 - el.naturalWidth / 2) * scale) + 'px';
 }
 window.addEventListener('resize', () => { for (const [id, side] of [['#playerSprite', 'p'], ['#enemySprite', 'e']]) { const el = $(id); if (el?.complete && el.src) fitSprite(el, side); } });
 function anim(sel, cls) {
@@ -1463,7 +1532,7 @@ function setupListeners() {
     if (e.target.closest('#missionBonus')) { if (!save.missions.bonus && save.missions.list.every(m => m.claimed)) { save.missions.bonus = true; save.inventory.expcandyl = (save.inventory.expcandyl || 0) + 1; afterProgress(); renderHome(); showMissions(); toast('Bonus: Exp. Candy L added to your Bag!'); } return; }
     if (e.target.closest('#openCheckin')) { showCheckin(); return; }
     if (e.target.closest('#howToPlay')) { showHowTo(); return; }
-    const feat = e.target.closest('[data-feature]'); if (feat) { ui.shopCat = feat.dataset.cat; ui.shopSel = feat.dataset.feature; ui.shopQty = 1; renderShop(); return; }
+    const feat = e.target.closest('[data-feature]'); if (feat) { if (ui.shopCat === feat.dataset.cat) { selectShopItem(feat.dataset.feature); return; } ui.shopCat = feat.dataset.cat; ui.shopSel = feat.dataset.feature; ui.shopQty = 1; renderShop(); return; }
     const rank = e.target.closest('[data-rank]'); if (rank) { ui.rankTab = rank.dataset.rank; renderRanks(); return; }
   });
   $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
@@ -1489,7 +1558,7 @@ function setupListeners() {
   // Shop
   $('#screen-shop').addEventListener('click', e => {
     const c = e.target.closest('[data-shopcat]'); if (c) { ui.shopCat = c.dataset.shopcat; ui.shopSel = null; ui.shopQty = 1; renderShop(); return; }
-    const s = e.target.closest('[data-shopsel]'); if (s) { ui.shopSel = s.dataset.shopsel; ui.shopQty = 1; renderShop(); return; }
+    const s = e.target.closest('[data-shopsel]'); if (s) { selectShopItem(s.dataset.shopsel); return; }
     const q = e.target.closest('[data-qty]'); if (q) { ui.shopQty = Math.max(1, Math.min(99, ui.shopQty + +q.dataset.qty)); renderShopDetail(); return; }
     const b = e.target.closest('[data-buy]'); if (b) { buyItem(b.dataset.buy); return; }
   });
@@ -1530,8 +1599,8 @@ function setupListeners() {
     showModal(`<h2 id="modalTitle">Paste a save code</h2><textarea id="pasteBox" placeholder="Paste your save code or JSON here" autofocus></textarea><div class="row-btns"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pasteOk">Continue</button></div>`);
     $('#pasteOk').onclick = () => { const v = $('#pasteBox').value; closeModal(true); previewImport(v); };
   });
-  $('#animationsToggle').addEventListener('change', e => { save.settings.animations = e.target.checked; persist(); });
-  $('#effectsToggle').addEventListener('change', e => { save.settings.reducedEffects = e.target.checked; document.body.classList.toggle('reduced-effects', e.target.checked); persist(); });
+  $('#animationsToggle').addEventListener('change', e => { save.settings.animations = e.target.checked; persist(); startParade(); });
+  $('#effectsToggle').addEventListener('change', e => { save.settings.reducedEffects = e.target.checked; document.body.classList.toggle('reduced-effects', e.target.checked); persist(); startParade(); });
   $('#damageToggle').addEventListener('change', e => { save.settings.showDamage = e.target.checked; persist(); });
   $('#speedSelect').addEventListener('change', e => { save.settings.battleSpeed = Number(e.target.value) || 1; persist(); });
   $('#resetSave').addEventListener('click', () => confirmBox('Reset everything?', 'This deletes the save in this browser (a backup copy is kept). Your cloud save is not deleted, but it will be overwritten if you keep playing while signed in.', 'Delete local save', () => {
@@ -1615,6 +1684,53 @@ function showBootError() {
   $('#app').prepend(box);
   $('#bootRetry').addEventListener('click', () => { box.remove(); boot(); });
 }
+// ---------- Wandering Pokémon ----------
+// Random Pokémon cross the bottom of the screen: walkers trot along the ground,
+// Flying types and Levitate users drift higher with a slow bob. Off in battle and
+// when the player turns animations off or asks for reduced motion.
+const parade = { timer: null, pool: null, live: 0 };
+function paradeOn() {
+  return save?.settings?.animations !== false && !save?.settings?.reducedEffects && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function paradePool() {
+  if (!parade.pool) parade.pool = Object.keys(D()).filter(id => { const d = D()[id]; return d.num <= 1000 && !d.prevo && !d.tags?.length; });
+  return parade.pool;
+}
+function spawnWanderer() {
+  const lane = $('#parade');
+  if (!lane || document.hidden || activeScreen === 'battle' || !paradeOn()) return;
+  if (parade.live >= (innerWidth < 700 ? 2 : 4)) return;
+  const pool = paradePool(), id = pool[Math.floor(Math.random() * pool.length)], d = D()[id];
+  const flies = d.types.includes('Flying') || Object.values(d.ab || {}).includes('Levitate');
+  const rightward = Math.random() < 0.5;
+  const el = document.createElement('div');
+  el.className = 'wanderer ' + (flies ? 'fly' : 'walk');
+  el.style.bottom = (flies ? 34 + Math.random() * 40 : 0) + 'px';
+  const im = new Image();
+  im.alt = ''; im.decoding = 'async';
+  im.onerror = () => el.remove();
+  im.onload = () => {
+    if (!el.isConnected) return;
+    im.style.width = Math.round(im.naturalWidth * (im.naturalHeight > 90 ? 90 / im.naturalHeight : 1)) + 'px';
+    const w = lane.clientWidth, span = w + 240;
+    const speed = 50 + d.bs[5] * 0.7; // px per second, from base Speed
+    parade.live++;
+    const run = el.animate([{ transform: `translateX(${rightward ? -120 : w + 120}px)` }, { transform: `translateX(${rightward ? w + 120 : -120}px)` }], { duration: span / speed * 1000, easing: 'linear' });
+    run.onfinish = run.oncancel = () => { el.remove(); parade.live--; };
+  };
+  // Showdown sprites face left; mirror them when walking right.
+  if (rightward) im.style.scale = '-1 1';
+  im.src = img.front(d.num, Math.random() < 1 / 64);
+  el.appendChild(im);
+  lane.appendChild(el);
+}
+function startParade() {
+  clearInterval(parade.timer);
+  if (!paradeOn()) { $$('#parade .wanderer').forEach(e => e.getAnimations().forEach(a => a.cancel())); return; }
+  setTimeout(spawnWanderer, 800);
+  parade.timer = setInterval(() => { if (Math.random() < 0.6) spawnWanderer(); }, 2600);
+}
+
 async function boot() {
   try { await Promise.all([loadData(), loadAssetManifest()]); }
   catch (err) { console.error('Data load failed', err); showBootError(); return; }
@@ -1624,6 +1740,7 @@ async function boot() {
   checkNewDay();
   if (save.settings.reducedEffects) document.body.classList.add('reduced-effects');
   if (!boot.wired) { setupListeners(); boot.wired = true; }
+  startParade();
   const start = location.hash.replace('#/', '');
   go(save.starterChosen ? (SCREENS.includes(start) && start !== 'battle' && start !== 'starter' ? start : 'home') : 'starter', { noHash: false });
   checkMedals();

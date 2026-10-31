@@ -187,3 +187,13 @@ test('journey: every species exists and every step builds a valid trainer', () =
   assert.equal(J.JOURNEY_TOTAL_COINS, G.JOURNEY_COINS);
   assert.equal(J.buildStepTrainer(J.regionSteps(0)[1]).team.map(p => p.species + p.level).join(','), 'geodude12,onix14');
 });
+
+test('paldea box: paradox Pokémon only come from the rare 4% sub-pool', () => {
+  const para = G.boxPool('paradox');
+  assert.ok(para.includes('greattusk') && para.includes('ironcrown'));
+  assert.ok(!G.boxPool('g9').some(id => para.includes(id)));
+  const r = E.makeRng(7); let n = 0;
+  for (let i = 0; i < 20000; i++) if (G.rollBox('g9', r).sub === 'paradox') n++;
+  assert.ok(n > 600 && n < 1000, String(n));
+  assert.equal(G.BOXES.master.price, 10000);
+});

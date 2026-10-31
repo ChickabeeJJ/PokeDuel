@@ -420,6 +420,8 @@ export const BOX_RANGES = { g1: [1, 151], g2: [152, 251], g3: [252, 386], g4: [3
 export const REGIONS = { g1: 'Kanto', g2: 'Johto', g3: 'Hoenn', g4: 'Sinnoh', g5: 'Unova', g6: 'Kalos', g7: 'Alola', g8: 'Galar', g9: 'Paldea' };
 export const STARTERS_BY_GEN = { 1: [1, 4, 7], 2: [152, 155, 158], 3: [252, 255, 258], 4: [387, 390, 393], 5: [495, 498, 501], 6: [650, 653, 656], 7: [722, 725, 728], 8: [810, 813, 816], 9: [906, 909, 912] };
 const isLegend = d => d.tags?.some(t => /Legendary|Mythical/.test(t));
+// Paradox Pokémon (Gouging Fire to Iron Crown lack the tag in the source data).
+export const isParadox = d => d.tags?.includes('Paradox') || (d.num >= 1020 && d.num <= 1023);
 const bst = d => d.bs.reduce((a, b) => a + b, 0);
 // Highest base stat total reachable along a species' evolution line.
 function lineBst(d) { return Math.max(bst(d), ...(d.evos || []).map(e => G.dex[e] ? lineBst(G.dex[e]) : 0)); }
@@ -432,16 +434,20 @@ export function boxPool(kind) {
   else if (kind === 'basic') p = pool(d => !isLegend(d) && !d.prevo);
   else if (kind === 'rare') p = pool(d => !isLegend(d) && !d.prevo && (d.evos ? lineBst(d) >= 500 : bst(d) >= 480));
   else if (kind === 'legend') p = pool(d => isLegend(d) && !d.prevo);
-  else if (BOX_RANGES[kind]) p = pool(d => d.num >= BOX_RANGES[kind][0] && d.num <= BOX_RANGES[kind][1] && !isLegend(d) && !d.prevo);
+  else if (kind === 'paradox') p = pool(d => isParadox(d) && !isLegend(d) && !d.prevo);
+  else if (BOX_RANGES[kind]) p = pool(d => d.num >= BOX_RANGES[kind][0] && d.num <= BOX_RANGES[kind][1] && !isLegend(d) && !isParadox(d) && !d.prevo);
   return poolCache[kind] = p || [];
 }
 export const BOXES = {
   starter: { name: 'Starter Box', price: 180, desc: 'A first-partner Pokémon from any of the nine generations.', odds: [['Starter Pokémon (27)', 100, 'starter']], art: 1 },
   basic: { name: 'Basic Box', price: 120, desc: 'Any non-legendary Pokémon from the National Pokédex.', odds: [['Non-legendary National Dex', 100, 'basic']], art: 52 },
   rare: { name: 'Rare Box', price: 350, desc: 'Pokémon from the strongest evolution lines, such as pseudo-legendaries.', odds: [['Strong lines (final form BST 500+)', 95, 'rare'], ['Legendary or Mythical', 5, 'legend']], art: 147, perfectIvs: 1 },
-  master: { name: 'Master Box', price: 700, desc: 'High chance of a Legendary or Mythical Pokémon.', odds: [['Legendary or Mythical', 40, 'legend'], ['Strong lines (final form BST 500+)', 40, 'rare'], ['Non-legendary National Dex', 20, 'basic']], art: 1007, perfectIvs: 2 },
+  master: { name: 'Master Box', price: 10000, desc: 'High chance of a Legendary or Mythical Pokémon.', odds: [['Legendary or Mythical', 40, 'legend'], ['Strong lines (final form BST 500+)', 40, 'rare'], ['Non-legendary National Dex', 20, 'basic']], art: 1007, perfectIvs: 2 },
 };
 for (const [k, n] of Object.entries(REGIONS)) BOXES[k] = { name: n + ' Box', price: 150, desc: 'A non-legendary Pokémon from ' + n + ' (No. ' + BOX_RANGES[k].join('–') + ').', odds: [[n + ' non-legendary', 100, k]], art: BOX_RANGES[k][0] + 3, region: true };
+// Paradox Pokémon are a rare pull from the Paldea Box.
+BOXES.g9.odds = [['Paldea non-legendary (non-Paradox)', 96, 'g9'], ['Paradox Pokémon', 4, 'paradox']];
+BOXES.g9.desc = 'A non-legendary Pokémon from Paldea (No. 906–1025). Paradox Pokémon are rare (4%).';
 BOXES.outbreak = { name: 'Outbreak Box', price: 90, desc: 'Today\'s mass-outbreak species, with boosted shiny odds (1/1024). Max 5 per day.', odds: [['Today\'s outbreak species', 100, 'outbreak']], daily: 5 };
 export function rollBox(kind, rng, ctx = {}) {
   const box = BOXES[kind];

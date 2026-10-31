@@ -26,10 +26,12 @@
 </head>
 <body>
 <header class="hud" id="hud" hidden>
+  <div class="hud-left">
   <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
   <div class="hud-wallet">
     <span class="pill" title="Trainer points"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-tp"/></svg><b id="hudScore">0</b>TP</span>
     <span class="pill" title="Coins"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-coin"/></svg><b id="coins">0</b></span>
+  </div>
   </div>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
@@ -179,6 +181,7 @@
 </footer>
 
 <div class="modal-backdrop hidden" id="modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="icon-btn modal-close" id="modalClose" aria-label="Close"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><div id="modalContent"></div></div></div>
+<div id="parade" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="app.js"></script>
 </body>

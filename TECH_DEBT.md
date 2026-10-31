@@ -27,6 +27,7 @@ Priority: **P1** fix before a public launch · **P2** important · **P3** nice t
 - **Some evolution conditions are simplified**: "walk 1000 steps"-style methods become 20 battles, and party/location conditions become level 30. See `evolutionOptions()` in `js/game.js`.
 - **Daily trainer levels scale with your highest party level**, so daily scores are not perfectly comparable between players. The species and RNG seed are shared for each date.
 - **Held items are not used up between battles.** Berries and Focus Sash are consumed only for the rest of that battle.
+- **Journey teams were written from game knowledge**, not imported from a database: one reference game per region (FireRed/LeafGreen, HeartGold/SoulSilver, Ruby/Sapphire, Diamond/Pearl, Black, X/Y, Sun/Moon, Sword, Scarlet/Violet). Check them against Bulbapedia before calling them exact. Regional forms (Alolan Persian, Dugtrio and Ninetales; Galarian Weezing) use the base species because forms aren't implemented. Movesets come from the AI move picker, not the in-game sets. Route trainers are generated, not the real route rosters.
 - **Learnsets are level-up moves plus TMs from the latest generation that has the species.** There are no egg or tutor moves, and no regional or alternate forms.
 
 ## P3
