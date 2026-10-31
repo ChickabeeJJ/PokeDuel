@@ -1,6 +1,7 @@
 import * as E from './js/engine.js';
 import * as G from './js/game.js';
 import * as S from './js/security.js';
+import * as J from './js/journey.js';
 
 // Firebase is loaded lazily so the game still works if the Firebase CDN is
 // unreachable; only sign-in, cloud saves and leaderboards are affected.
@@ -332,7 +333,7 @@ function checkNewDay() {
 }
 
 // ---------- Navigation ----------
-const SCREENS = ['starter', 'home', 'boxes', 'shop', 'bag', 'dex', 'leaderboard', 'profile', 'medals', 'battle'];
+const SCREENS = ['starter', 'home', 'boxes', 'shop', 'bag', 'dex', 'leaderboard', 'profile', 'medals', 'journey', 'battle'];
 function go(name, opts = {}) {
   if (name === 'practice') { startBattle('practice'); return; }
   if (!SCREENS.includes(name)) name = 'home';
@@ -341,12 +342,12 @@ function go(name, opts = {}) {
   activeScreen = name;
   document.body.classList.toggle('in-battle', name === 'battle');
   $('#hud').hidden = name === 'starter' || name === 'battle';
-  $('#siteFoot').hidden = !['home', 'dex', 'leaderboard', 'profile', 'medals'].includes(name);
+  $('#siteFoot').hidden = !['home', 'dex', 'leaderboard', 'profile', 'medals', 'journey'].includes(name);
   $$('.screen').forEach(s => s.classList.toggle('active', s.dataset.screen === name));
   $$('.hud-link').forEach(b => b.classList.toggle('active', b.dataset.go === name));
   if (!opts.noHash && location.hash !== '#/' + name) history.pushState(null, '', '#/' + name);
   window.scrollTo({ top: 0, behavior: 'auto' });
-  ({ starter: renderStarter, home: renderHome, boxes: renderBoxes, shop: renderShop, bag: renderBag, dex: renderDex, leaderboard: renderRanks, profile: renderProfile, medals: renderMedals }[name] || (() => {}))();
+  ({ starter: renderStarter, home: renderHome, boxes: renderBoxes, shop: renderShop, bag: renderBag, dex: renderDex, leaderboard: renderRanks, profile: renderProfile, medals: renderMedals, journey: renderJourney }[name] || (() => {}))();
 }
 function updateHud() {
   if (!save) return;
@@ -469,7 +470,7 @@ function missionReady() { const v = save.dayStats.values; return save.missions.l
 function renderMainMenu() {
   const ready = missionReady();
   const left = Math.max(0, 5 - (save.outbreak.date === G.todayKey() ? save.outbreak.opened : 0));
-  const items = [['practice', 'battle', 'Practice', ''], ['missions', 'mission', 'Missions', ready || ''], ['boxes', 'box', 'Boxes', ''], ['shop', 'shop', 'Shop', left ? 'New' : ''], ['bag', 'bag', 'Bag', ''], ['dex', 'dex', 'Pokédex', ''], ['medals', 'medal', 'Medals', '']];
+  const items = [['journey', 'map', 'Journey', ''], ['practice', 'battle', 'Practice', ''], ['missions', 'mission', 'Missions', ready || ''], ['boxes', 'box', 'Boxes', ''], ['shop', 'shop', 'Shop', left ? 'New' : ''], ['bag', 'bag', 'Bag', ''], ['dex', 'dex', 'Pokédex', ''], ['medals', 'medal', 'Medals', '']];
   $('#mainMenu').innerHTML = items.map(([go, icon, label, badge]) => `<button class="qtile" data-go="${go}">${ic(icon)}<span>${label}</span>${badge ? `<i class="badge">${badge}</i>` : ''}</button>`).join('');
 }
 function showCheckin() {
@@ -978,6 +979,65 @@ function renderMedals() {
   $('#medalCount').textContent = Object.keys(save.medals).length + ' / ' + G.MEDALS.length;
   $('#medalGrid').innerHTML = G.MEDALS.map(m => `<div class="medal ${save.medals[m.id] ? '' : 'locked'}"><span class="m">${ic(save.medals[m.id] ? 'medal' : 'lock')}</span><span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small><small>${save.medals[m.id] ? 'Earned ' + save.medals[m.id] : 'Reward: ' + m.reward + ' coins'}</small></span></div>`).join('');
 }
+// ---------- Journey ----------
+// Kanto to Paldea: a route trainer before every gym, then the Elite Four and the
+// Champion. Each region unlocks after the previous Champion falls.
+function stepLabel(step) {
+  if (step.kind === 'route') return 'Route ' + (step.gym + 1);
+  if (step.kind === 'gym') return step.leader.name;
+  return (step.kind === 'champion' ? 'Champion ' : 'Elite Four ') + step.leader.name;
+}
+const journeyCleared = key => !!save.journey?.cleared?.[key];
+function regionUnlocked(ri) { return ri === 0 || journeyCleared(J.REGIONS[ri - 1].id + ':' + (J.regionSteps(ri - 1).length - 1)); }
+function regionDone(ri) { return J.regionSteps(ri).filter(s => journeyCleared(s.key)).length; }
+function currentRegion() { let ri = 0; while (ri < J.REGIONS.length - 1 && regionUnlocked(ri + 1)) ri++; return ri; }
+const typeCls = t => 't-' + (t === 'Mixed' ? 'unknown' : t.toLowerCase());
+function renderJourney() {
+  save.journey = save.journey || { cleared: {} };
+  if (ui.jRegion === undefined || !regionUnlocked(ui.jRegion)) ui.jRegion = currentRegion();
+  const badgesAll = J.REGIONS.reduce((a, R, ri) => a + J.regionSteps(ri).filter(s => s.kind === 'gym' && journeyCleared(s.key)).length, 0);
+  const champs = J.REGIONS.filter((R, ri) => journeyCleared(R.id + ':' + (J.regionSteps(ri).length - 1))).length;
+  $('#journeyCount').textContent = badgesAll + ' badges · ' + champs + ' / ' + J.REGIONS.length + ' regions';
+  $('#journeyRegions').innerHTML = J.REGIONS.map((R, ri) => {
+    const open = regionUnlocked(ri), done = regionDone(ri), total = J.regionSteps(ri).length;
+    return `<button class="j-region ${ri === ui.jRegion ? 'active' : ''} ${done === total ? 'clear' : ''}" data-jregion="${ri}" ${open ? '' : 'disabled'} aria-pressed="${ri === ui.jRegion}">
+      <small>${ri + 1}</small><b>${R.name}</b>${open ? `<i>${done === total ? ic('crown') : done + '/' + total}</i>` : ic('lock')}</button>`;
+  }).join('');
+  const ri = ui.jRegion, R = J.REGIONS[ri], steps = J.regionSteps(ri);
+  const next = steps.find(s => !journeyCleared(s.key));
+  const badges = steps.filter(s => s.kind === 'gym');
+  const head = `<header class="j-head"><div><span class="eyebrow">${R.kahunas ? 'Island challenge' : 'Gym challenge'} · ${esc(R.game)} teams</span><h1>${R.name}</h1>
+      <p>${next ? `Next: <b>${esc(next.kind === 'route' ? 'a trainer on the road to ' + R.gyms[next.gym].name : stepLabel(next))}</b>` : `You are the ${R.name} Champion. Rematches give Exp. Points.`}</p></div>
+    <div class="j-badges" aria-label="${R.kahunas ? 'Grand trials' : 'Badges'}">${badges.map(s => `<span class="j-badge ${typeCls(s.leader.type)} ${journeyCleared(s.key) ? 'got' : ''}" title="${esc(s.leader.name)} · ${esc(s.leader.type)}${journeyCleared(s.key) ? ' · earned' : ''}">${ic('badge')}</span>`).join('')}</div></header>`;
+  let gate = false;
+  const rows = steps.map((s, i) => {
+    const cleared = journeyCleared(s.key), avail = !gate && (i === 0 || journeyCleared(steps[i - 1].key));
+    if (!cleared && !avail) gate = true;
+    const lead = s.kind !== 'route';
+    const team = lead ? s.leader.team : null, route = lead ? null : J.buildStepTrainer(s);
+    const lvl = lead ? Math.max(...team.map(t => t[1])) : route.level;
+    const kindTag = { route: 'Trainer', gym: R.kahunas ? 'Kahuna' : 'Gym Leader', elite: s.leader?.title === 'Elite Four' ? 'Elite Four' : s.leader?.title, champion: 'Champion' }[s.kind];
+    const act = cleared ? `<span class="j-done">${ic('check')}Cleared</span><button class="btn ghost small" data-jstep="${i}">Rematch</button>`
+      : avail ? `<span class="j-reward">${ic('coin')}+${J.STEP_COINS[s.kind]}</span><button class="btn primary" data-jstep="${i}">${ic('battle')}Battle</button>`
+      : `<span class="j-locked">${ic('lock')}Locked</span>`;
+    return `<article class="jrow ${s.kind} ${cleared ? 'cleared' : ''} ${avail && !cleared ? 'next' : ''} ${!avail && !cleared ? 'locked' : ''}">
+      <span class="jnum">${lead ? ic(s.kind === 'champion' ? 'crown' : 'badge') : s.gym + 1}</span>
+      <div class="jinfo"><span class="jkind">${esc(kindTag)}${lead ? ` <span class="type ${typeCls(s.leader.type)}">${esc(s.leader.type)}</span>` : ''}</span>
+        <h3>${esc(lead ? s.leader.name : 'Route ' + (s.gym + 1))}</h3>
+        <span class="jmeta">${lead ? esc(s.leader.title === 'Elite Four' || s.leader.title === 'Champion' ? R.name + ' League' : s.leader.title) + ' · ' : ''}${lead ? team.length : route.team.length} Pokémon · up to Lv. ${lvl}</span></div>
+      <div class="jteam">${lead && (cleared || avail) ? team.map(([id]) => iconOf(G.gameData.dex[id].num, false, G.gameData.dex[id].name)).join('') : ''}</div>
+      <div class="jact">${act}</div></article>`;
+  }).join('');
+  $('#journeyBody').innerHTML = head + `<div class="j-path">${rows}</div>`;
+  $$('#journeyRegions [data-jregion]').forEach(b => b.onclick = () => { ui.jRegion = +b.dataset.jregion; renderJourney(); });
+  $$('#journeyBody [data-jstep]').forEach(b => b.onclick = () => {
+    const s = steps[+b.dataset.jstep];
+    const top = topLevel(), lvl = s.kind === 'route' ? J.buildStepTrainer(s).level : Math.max(...s.leader.team.map(t => t[1]));
+    if (top < lvl - 8) confirmBox('Tough battle ahead', `${esc(stepLabel(s))}'s team goes up to Lv. ${lvl}, and your strongest Pokémon is Lv. ${top}. You can still try. Losing costs nothing.`, 'Battle anyway', () => startBattle('journey', s));
+    else startBattle('journey', s);
+  });
+}
+
 // ---------- Export / import ----------
 // Asks for a password (twice when creating one). Resolves to the password or null.
 function askPassword({ title, text, confirm }) {
@@ -1067,19 +1127,22 @@ let battleState = null;
 function buildPlayerTeam() {
   return partyMons().map(p => ({ uid: p.uid, species: p.species, level: p.level, nickname: p.nickname, moves: p.moves, ability: p.ability, item: p.item, nature: p.mint || p.nature, ivs: G.effectiveIvs(p), evs: p.evs, teraType: p.teraType, gender: p.gender, shiny: p.shiny, friendship: p.friendship }));
 }
-function startBattle(tier) {
+// Free battles (practice, journey) can be left at any time and don't use a daily attempt.
+const isFree = tier => tier === 'practice' || tier === 'journey';
+const JOURNEY_LIGHT = { route: 'easy', gym: 'medium', elite: 'hard', champion: 'hard' };
+function startBattle(tier, step) {
   if (!save.starterChosen || !partyMons().length) { toast('Choose a starter first.'); return; }
   checkNewDay();
-  if (tier !== 'practice' && save.daily[tier]) { toast('You already took on this daily battle today.'); return; }
+  if (!isFree(tier) && save.daily[tier]) { toast('You already took on this daily battle today.'); return; }
   const begin = () => {
     const key = G.todayKey();
-    const trainer = G.buildTrainer(tier, key, topLevel());
-    const seed = tier === 'practice' ? Date.now() : E.hashString(key + ':' + tier + ':battle');
-    const b = E.createBattle({ player: { name: trainerName(), team: buildPlayerTeam() }, enemy: { name: trainer.name, team: trainer.team }, seed, ai: G.DAILY_TIERS[tier].ai, label: trainer.name });
-    if (tier !== 'practice') { save.daily[tier] = { result: 'pending', date: key }; persist(); }
-    battleState = { b, tier, trainer, ui: { p: null, e: null }, tera: false, menu: 'main', playing: false, ko: [], startedTurn: 1, itemsUsed: 0 };
-    setupArena(tier);
-    $('#battleLabel').textContent = tier === 'practice' ? 'Practice' : 'Daily · ' + G.DAILY_TIERS[tier].name;
+    const trainer = tier === 'journey' ? J.buildStepTrainer(step) : G.buildTrainer(tier, key, topLevel());
+    const seed = isFree(tier) ? Date.now() : E.hashString(key + ':' + tier + ':battle');
+    const b = E.createBattle({ player: { name: trainerName(), team: buildPlayerTeam() }, enemy: { name: trainer.name, team: trainer.team }, seed, ai: tier === 'journey' ? trainer.ai : G.DAILY_TIERS[tier].ai, label: trainer.name });
+    if (!isFree(tier)) { save.daily[tier] = { result: 'pending', date: key }; persist(); }
+    battleState = { b, tier, step, trainer, ui: { p: null, e: null }, tera: false, menu: 'main', playing: false, ko: [], startedTurn: 1, itemsUsed: 0 };
+    setupArena(tier === 'journey' ? JOURNEY_LIGHT[step.kind] : tier);
+    $('#battleLabel').textContent = tier === 'practice' ? 'Practice' : tier === 'journey' ? J.REGIONS[step.region].name + ' · ' + stepLabel(step) : 'Daily · ' + G.DAILY_TIERS[tier].name;
     $('#battleLog').textContent = '';
     $('#battleControls').innerHTML = '';
     $('#playerSprite').className = 'battle-sprite mine gone'; $('#enemySprite').className = 'battle-sprite foe gone';
@@ -1088,7 +1151,7 @@ function startBattle(tier) {
     intro.unshift({ t: 'msg', text: (tier === 'practice' ? 'Practice Partner' : trainer.name) + ' would like to battle!' });
     playEvents(intro).then(renderCommands);
   };
-  if (tier === 'practice') begin();
+  if (isFree(tier)) begin();
   else confirmBox('Daily battle · ' + G.DAILY_TIERS[tier].name, `You get <b>one attempt</b> per day. Leaving or reloading during the battle counts as a loss. Your party of ${partyMons().length} will battle ${G.DAILY_TIERS[tier].size} Pokémon.`, 'Battle!', begin);
 }
 // Places sprites on the painted platforms of the arena art (positions from assets/manifest.json).
@@ -1227,8 +1290,8 @@ function renderCommands() {
     $('#battleLog').textContent = 'Choose a move for ' + me.name + '. Keys 1–4 also work.';
     return;
   }
-  const bagLocked = st.tier !== 'practice' && st.tier !== 'easy' && st.itemsUsed >= 3;
-  el.innerHTML = `<div class="cmd-grid"><button class="cmd fight" data-cmd="fight">${ic('battle')}Fight</button><button class="cmd party" data-cmd="party" ${req.trapped || !req.switches.length ? 'disabled' : ''}>${ic('swap')}Pokémon</button><button class="cmd bag" data-cmd="bag" ${bagLocked ? 'disabled title="Item limit reached"' : ''}>${ic('bag')}Bag</button><button class="cmd run" data-cmd="run">${ic('run')}${st.tier === 'practice' ? 'Run' : 'Forfeit'}</button></div>`;
+  const bagLocked = !isFree(st.tier) && st.tier !== 'easy' && st.itemsUsed >= 3;
+  el.innerHTML = `<div class="cmd-grid"><button class="cmd fight" data-cmd="fight">${ic('battle')}Fight</button><button class="cmd party" data-cmd="party" ${req.trapped || !req.switches.length ? 'disabled' : ''}>${ic('swap')}Pokémon</button><button class="cmd bag" data-cmd="bag" ${bagLocked ? 'disabled title="Item limit reached"' : ''}>${ic('bag')}Bag</button><button class="cmd run" data-cmd="run">${ic('run')}${isFree(st.tier) ? 'Run' : 'Forfeit'}</button></div>`;
   $('#battleLog').textContent = 'What will ' + me.name + ' do?';
 }
 function renderPartyPicker(forced) {
@@ -1267,7 +1330,8 @@ async function submit(action) {
 }
 function confirmForfeit(after) {
   const st = battleState;
-  confirmBox(st.tier === 'practice' ? 'Leave practice?' : 'Forfeit this battle?', st.tier === 'practice' ? 'You will receive no rewards.' : 'Forfeiting counts as a loss and uses today\'s attempt.', st.tier === 'practice' ? 'Leave' : 'Forfeit', () => {
+  const free = isFree(st.tier);
+  confirmBox(free ? 'Leave this battle?' : 'Forfeit this battle?', st.tier === 'journey' ? 'It counts as a loss. You can challenge this trainer again any time.' : free ? 'You will receive no rewards.' : 'Forfeiting counts as a loss and uses today\'s attempt.', free ? 'Leave' : 'Forfeit', () => {
     st.b.ended = true; st.b.winner = 'e'; st.forfeit = true;
     finishBattle().then(() => after?.());
   }, true);
@@ -1275,7 +1339,9 @@ function confirmForfeit(after) {
 async function finishBattle() {
   const st = battleState; if (!st || st.finished) return; st.finished = true;
   const b = st.b, won = b.winner === 'p';
-  const tier = st.tier, t = G.DAILY_TIERS[tier];
+  const tier = st.tier, journey = tier === 'journey';
+  const firstClear = journey && won && !st.forfeit && !save.journey.cleared[st.step.key];
+  const t = journey ? { name: stepLabel(st.step), coins: firstClear ? J.STEP_COINS[st.step.kind] : 0 } : G.DAILY_TIERS[tier];
   const key = G.todayKey();
   const party = partyMons();
   const participants = new Set(b.sides.p.team.filter(m => m.activeTurns > 0 || m === E.active(b, 'p') || st.ko.some(k => k.seenBy.includes(m.uid))).map(m => m.uid));
@@ -1307,9 +1373,10 @@ async function finishBattle() {
     if (autoEvolutions(p).length) evoQueue.push(p);
   }
   // Coins and records
-  let coins = won ? t.coins : Math.floor(t.coins * 0.3);
-  if (st.forfeit) coins = tier === 'practice' ? 0 : Math.floor(t.coins * 0.2);
-  const amulet = party.some(p => participants.has(p.uid) && p.item === 'amuletcoin');
+  let coins = won ? t.coins : journey ? 0 : Math.floor(t.coins * 0.3);
+  if (st.forfeit) coins = isFree(tier) ? 0 : Math.floor(t.coins * 0.2);
+  // Journey rewards are one-off and fixed, so the Amulet Coin doesn't double them.
+  const amulet = !journey && party.some(p => participants.has(p.uid) && p.item === 'amuletcoin');
   if (amulet) coins *= 2;
   let capped = false;
   if (tier === 'practice' && won) {
@@ -1323,7 +1390,11 @@ async function finishBattle() {
   const fainted = pTeam.filter(m => m.fainted).length;
   const turns = b.turn;
   let score = 0;
+  let newBadge = null;
   if (tier === 'practice') { save.practiceCount++; if (won) bumpDay('practiceWins'); }
+  else if (journey) {
+    if (firstClear) { save.journey.cleared[st.step.key] = key; if (st.step.kind === 'gym') newBadge = st.step.leader; }
+  }
   else {
     score = G.battleScore(tier, won && !st.forfeit, { turns, hpLeftPct, fainted });
     save.daily[tier] = { result: won ? 'win' : 'loss', score, turns, date: key, hp: Math.round(hpLeftPct * 100), team: st.trainer.team.map(p => sp(p).num) };
@@ -1347,17 +1418,20 @@ async function finishBattle() {
     return `<div class="result-mon">${iconOf(sp(p).num, p.shiny)}<span><b>${esc(p.nickname || sp(p).name)}</b> ${g.levels.length ? `<span class="badge-chip gold">Lv. ${p.level}!</span>` : `<small>Lv. ${p.level}</small>`}<br><small>+${fmt(g.exp)} EXP${evTxt ? ' · EVs ' + evTxt : ''}${g.learned.length ? ' · learned ' + esc(g.learned.join(', ')) : ''}${g.newMark ? ' · earned the ' + esc(G.MARKS[g.newMark].name) + '!' : ''}</small><div class="xp-bar"><i style="width:${prog.pct}%"></i></div></span></div>`;
   }).join('');
   const choice = await new Promise(resolve => {
-    showModal(`<div class="eyebrow">${tier === 'practice' ? 'Practice' : 'Daily · ' + esc(t.name)}</div><h2 id="modalTitle">${won ? 'You won!' : st.forfeit ? 'You forfeited.' : 'You lost…'}</h2>
-      <p>${won ? 'You defeated ' + esc(st.trainer.name) + ' in ' + turns + ' turns.' : 'Train up and try again' + (tier === 'practice' ? '!' : ' tomorrow!')}</p>
-      <div class="odds"><div class="odds-row"><span>Coins</span><b>+${coins}${amulet ? ' (Amulet Coin ×2)' : ''}${capped ? ' (daily practice coin limit reached)' : ''}</b></div>${tier !== 'practice' ? `<div class="odds-row"><span>Daily score</span><b>${fmt(score)} pts</b></div>` : ''}<div class="odds-row"><span>Knockouts</span><b>${bs.kos}</b></div></div>
+    const title = won ? (journey && st.step.kind === 'champion' && firstClear ? 'New Champion!' : 'You won!') : st.forfeit ? (isFree(tier) ? 'You left the battle.' : 'You forfeited.') : 'You lost…';
+    const eyebrow = tier === 'practice' ? 'Practice' : journey ? 'Journey · ' + esc(J.REGIONS[st.step.region].name) : 'Daily · ' + esc(t.name);
+    const msg = won ? 'You defeated ' + esc(st.trainer.name) + ' in ' + turns + ' turns.' + (newBadge ? ` You earned the <b>${esc(newBadge.title.replace(/ (Gym|Stadium|Kahuna)$/, ''))} ${J.REGIONS[st.step.region].kahunas ? 'Grand Trial stamp' : 'Badge'}</b>!` : journey && !firstClear ? ' Rematches give Exp. Points only.' : '') : 'Train up and try again' + (isFree(tier) ? '!' : ' tomorrow!');
+    showModal(`<div class="eyebrow">${eyebrow}</div><h2 id="modalTitle">${title}</h2>
+      <p>${msg}</p>
+      <div class="odds"><div class="odds-row"><span>Coins</span><b>+${coins}${amulet ? ' (Amulet Coin ×2)' : ''}${capped ? ' (daily practice coin limit reached)' : ''}</b></div>${!isFree(tier) ? `<div class="odds-row"><span>Daily score</span><b>${fmt(score)} pts</b></div>` : ''}<div class="odds-row"><span>Knockouts</span><b>${bs.kos}</b></div></div>
       <div class="result-list">${rows}</div>
-      <div class="row-btns">${tier !== 'practice' && won ? `<button class="btn ghost" data-share="${tier}">Share result</button>` : ''}${tier === 'practice' ? '<button class="btn ghost" id="againPractice">Battle again</button>' : ''}<button class="btn primary" data-close autofocus>Continue</button></div>`, { wide: true, onClose: () => resolve('continue') });
+      <div class="row-btns">${!isFree(tier) && won ? `<button class="btn ghost" data-share="${tier}">Share result</button>` : ''}${tier === 'practice' ? '<button class="btn ghost" id="againPractice">Battle again</button>' : ''}<button class="btn primary" data-close autofocus>Continue</button></div>`, { wide: true, onClose: () => resolve('continue') });
     const again = $('#againPractice'); if (again) again.onclick = () => { modalOnClose = null; closeModal(true); resolve('again'); };
   });
   if (battleState === st) battleState = null;
   const runEvos = () => {
     const p = evoQueue.shift();
-    if (!p) { if (choice === 'again') startBattle('practice'); else if (activeScreen === 'battle') go('home'); return; }
+    if (!p) { if (choice === 'again') startBattle('practice'); else if (activeScreen === 'battle') go(journey ? 'journey' : 'home'); return; }
     const o = autoEvolutions(p)[0]; if (!o) return runEvos(); doEvolve(p, o, runEvos);
   };
   runEvos();
@@ -1504,7 +1578,7 @@ function setupListeners() {
     if (activeScreen === 'battle' && battleState && !battleState.playing && /^[1-4]$/.test(e.key) && battleState.menu === 'fight') { const b = $(`#battleControls [data-mi="${+e.key - 1}"]`); if (b && !b.disabled) b.click(); }
   });
   window.addEventListener('popstate', () => { const name = location.hash.replace('#/', '') || 'home'; if (name !== activeScreen) go(name, { noHash: true }); });
-  window.addEventListener('beforeunload', e => { if (battleState && !battleState.b.ended && battleState.tier !== 'practice') { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', e => { if (battleState && !battleState.b.ended && !isFree(battleState.tier)) { e.preventDefault(); e.returnValue = ''; } });
 }
 
 // ---------- Boot ----------

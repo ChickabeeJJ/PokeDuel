@@ -48,4 +48,7 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="3.4" stroke-linecap="square" d="M12 4v16M4 12h16"/></symbol>
   <symbol id="i-minus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="3.4" stroke-linecap="square" d="M4 12h16"/></symbol>
   <symbol id="i-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1l4 7 7 4-7 4-4 7-4-7-7-4 7-4z"/><path fill="#fff" d="M12 7.5l1.6 2.9 2.9 1.6-2.9 1.6L12 16.5l-1.6-2.9L7.5 12l2.9-1.6z" opacity=".55"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path fill="currentColor" d="M1 4.5l7-3 8 3 7-3v18l-7 3-8-3-7 3zm8 .2v14.6l6 2.2V6.9z"/></symbol>
+  <symbol id="i-badge" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1l8 4.5v9L12 23l-8-8.5v-9zm0 4.2L7.5 7.7v5.1L12 17.6l4.5-4.8V7.7z"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path fill="currentColor" d="M2 6l5 4.5L12 3l5 7.5L22 6l-2 13H4zm2.6 15h14.8v2H4.6z"/></symbol>
 </svg>

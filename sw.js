@@ -4,9 +4,9 @@
 // - Game data and assets: served from cache immediately, refreshed in the background.
 // Sprites (PokéAPI sprite repo) are left to the browser's own HTTP cache.
 // Firebase, Google sign-in and PokéAPI requests are never cached.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CODE = 'pd-code-' + VERSION, DATA = 'pd-data-' + VERSION;
-const PRECACHE = ['./', 'index.html', 'styles.css', 'app.js', 'js/engine.js', 'js/game.js', 'js/security.js', 'assets/icons.svg', 'assets/logo.svg', 'assets/manifest.json', 'data/pokedex.json', 'data/moves.json', 'data/learnsets.json', 'data/abilities.json'];
+const PRECACHE = ['./', 'index.html', 'styles.css', 'app.js', 'js/engine.js', 'js/game.js', 'js/security.js', 'js/journey.js', 'assets/icons.svg', 'assets/logo.svg', 'assets/manifest.json', 'data/pokedex.json', 'data/moves.json', 'data/learnsets.json', 'data/abilities.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(DATA).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));

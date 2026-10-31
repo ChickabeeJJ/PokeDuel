@@ -172,3 +172,18 @@ test('encrypted export round-trips and rejects wrong passwords / edits', async (
   const bad = { ...env, data: env.data.slice(0, -6) + (env.data.slice(-6, -5) === 'A' ? 'B' : 'A') + env.data.slice(-5) };
   await assert.rejects(S.decryptSave(bad, 'correct horse'));
 });
+
+import * as J from '../js/journey.js';
+test('journey: every species exists and every step builds a valid trainer', () => {
+  const missing = [];
+  for (const R of J.REGIONS) for (const L of [...R.gyms, ...R.elite, R.champion]) for (const [sp] of L.team) if (!dex[sp]) missing.push(R.id + ':' + L.name + ':' + sp);
+  assert.deepEqual(missing, []);
+  assert.equal(J.REGIONS.map(r => r.id).join(','), 'kanto,johto,hoenn,sinnoh,unova,kalos,alola,galar,paldea');
+  for (let ri = 0; ri < J.REGIONS.length; ri++) for (const step of J.regionSteps(ri)) {
+    const t = J.buildStepTrainer(step);
+    assert.ok(t.team.length >= 1 && t.team.every(p => p.moves.length >= 1));
+    assert.deepEqual(J.buildStepTrainer(step).team.map(p => p.species), t.team.map(p => p.species));
+  }
+  assert.equal(J.JOURNEY_TOTAL_COINS, G.JOURNEY_COINS);
+  assert.equal(J.buildStepTrainer(J.regionSteps(0)[1]).team.map(p => p.species + p.level).join(','), 'geodude12,onix14');
+});

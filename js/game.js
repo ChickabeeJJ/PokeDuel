@@ -556,7 +556,7 @@ export function defaultSave() {
     checkin: { last: '', streak: 0, best: 0 }, missions: { date: '', list: [], bonus: false },
     wins: 0, battles: 0, practiceCount: 0, ownedDex: [], seenDex: [], shinyDex: [], medals: {}, showcase: [],
     stats: { kos: 0, superEffective: 0, crits: 0, boxesOpened: 0, evolutions: 0, dailySweeps: 0, teraWins: 0, damageDealt: 0, statusMoves: 0, trainingItems: 0, teraUsed: 0, practiceWins: 0, dailyWins: 0 },
-    dayStats: { date: '', values: {} }, history: [], dailyScores: {},
+    dayStats: { date: '', values: {} }, history: [], dailyScores: {}, journey: { cleared: {} },
     ledger: { start: 300, earned: 0, spent: 0, expGranted: 0, pokemonGranted: 0, practiceCoins: { date: '', wins: 0 } },
     integrity: { status: 'ok', reasons: [] },
     settings: { animations: true, reducedEffects: false, battleSpeed: 1, showDamage: true },
@@ -633,6 +633,7 @@ export function migrateSave(raw) {
   s.checkin = { ...base.checkin, ...(raw.checkin || {}) };
   s.missions = { ...base.missions, ...(raw.missions || {}) };
   s.outbreak = { ...base.outbreak, ...(raw.outbreak || {}) };
+  s.journey = { cleared: raw.journey && typeof raw.journey.cleared === 'object' && raw.journey.cleared ? { ...raw.journey.cleared } : {} };
   s.settings = { ...base.settings, ...(raw.settings || {}) };
   s.medals = typeof raw.medals === 'object' && raw.medals ? raw.medals : {};
   s.dayStats = raw.dayStats && typeof raw.dayStats === 'object' ? raw.dayStats : base.dayStats;
@@ -660,6 +661,8 @@ export function migrateSave(raw) {
 // Generous plausibility checks. A failed check never deletes anything; the save
 // is just marked unranked. Caps are set well above what legitimate play earns.
 export const RELEASE_EPOCH = Date.parse('2026-10-28T00:00:00Z');
+// Sum of every first-clear reward in Journey mode (js/journey.js; a test keeps them equal).
+export const JOURNEY_COINS = 34520;
 export const DAILY_COIN_CAP = 3000;        // check-in + missions + daily battles (x2 Amulet Coin) + capped practice
 export const PRACTICE_COIN_WINS = 30;      // practice wins per day that still pay coins
 export const MEDAL_TOTAL = () => MEDALS.reduce((a, m) => a + m.reward, 0);
@@ -676,7 +679,7 @@ export function auditSave(s, now = Date.now()) {
   if (s.coins !== (L.start || 0) + (L.earned || 0) - (L.spent || 0)) issues.push('Coin balance does not match the coin ledger.');
   const born = Math.max(Date.parse(s.createdAt) || now, RELEASE_EPOCH);
   const days = Math.max(1, Math.floor((now - born) / 864e5) + 1);
-  if ((L.earned || 0) > MEDAL_TOTAL() + days * DAILY_COIN_CAP) issues.push('More coins were earned than the game can pay out in ' + days + ' day(s).');
+  if ((L.earned || 0) > MEDAL_TOTAL() + JOURNEY_COINS + days * DAILY_COIN_CAP) issues.push('More coins were earned than the game can pay out in ' + days + ' day(s).');
   if ((L.start || 0) > 20000) issues.push('Starting coin balance is implausible.');
   const seen = new Set();
   let expGained = 0, shinies = 0;

@@ -17,6 +17,7 @@
 <link rel="modulepreload" href="js/engine.js">
 <link rel="modulepreload" href="js/game.js">
 <link rel="modulepreload" href="js/security.js">
+<link rel="modulepreload" href="js/journey.js">
 <link rel="preload" href="data/pokedex.json" as="fetch" crossorigin>
 <link rel="preload" href="data/moves.json" as="fetch" crossorigin>
 <link rel="preload" href="data/learnsets.json" as="fetch" crossorigin>
@@ -32,6 +33,7 @@
   </div>
   <nav class="hud-nav" aria-label="Main">
     <button data-go="home" class="hud-link">Home</button>
+    <button data-go="journey" class="hud-link">Journey</button>
     <button data-go="boxes" class="hud-link">Boxes</button>
     <button data-go="shop" class="hud-link">Shop</button>
     <button data-go="bag" class="hud-link">Bag</button>
@@ -140,6 +142,13 @@
   <section id="screen-medals" class="screen screen-profile" data-screen="medals">
     <div class="tabbar violet-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Medals</span><span class="muted" id="medalCount"></span></div>
     <div class="medal-grid" id="medalGrid"></div>
+  </section>
+
+  <!-- Journey: Kanto to Paldea -->
+  <section id="screen-journey" class="screen screen-journey" data-screen="journey">
+    <div class="tabbar violet-tabs"><button class="icon-btn light" data-go="home" aria-label="Back to home"><svg class="ic"><use href="assets/icons.svg#i-close"/></svg></button><span class="tab-on">Journey</span><span class="muted" id="journeyCount"></span></div>
+    <nav class="j-regions" id="journeyRegions" aria-label="Regions"></nav>
+    <div class="j-body" id="journeyBody"></div>
   </section>
 
   <!-- Battle -->
