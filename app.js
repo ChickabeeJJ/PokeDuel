@@ -773,7 +773,7 @@ function renderShop() {
   const key = G.todayKey(), deal = dailyDeal(), ob = D()[G.dailyOutbreak(key)];
   const left = Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0));
   const features = `<div class="feature-row">
-    <button class="feature ${ui.shopSel === 'box:outbreak' ? 'on' : ''}" data-feature="box:outbreak" data-cat="boxes">${artOf(ob.num, false, ob.name)}<span><span class="k">Mass outbreak</span><b>${esc(ob.name)}</b><small>Shiny odds 1/64 · ${left} of 5 left today</small></span></button>
+    <button class="feature ${ui.shopSel === 'box:outbreak' ? 'on' : ''}" data-feature="box:outbreak" data-cat="boxes">${artOf(ob.num, false, ob.name)}<span><span class="k">Mass outbreak</span><b>${esc(ob.name)}</b><small>Boosted shiny odds · ${left} of 5 left today</small></span></button>
     <button class="feature deal ${ui.shopSel === deal ? 'on' : ''}" data-feature="${deal}" data-cat="${G.ITEMS[deal].cat}">${pic(G.itemSprite(deal), [], 'alt="" class="px"')}<span><span class="k">Deal of the day · 30% off</span><b>${esc(G.ITEMS[deal].name)}</b><small>${fmt(priceOf(deal))} coins instead of ${fmt(G.ITEMS[deal].price)}</small></span></button></div>`;
   const cards = list.map(x => {
     if (x.box) return `<li><button class="item-card box-card tier-${BOX_TIER[x.box] || 'region'} ${ui.shopSel === x.id ? 'on' : ''}" data-shopsel="${x.id}"><span class="tile">${pic(img.art(boxArt(x.box), false), [img.icon(boxArt(x.box), false)], 'alt="" class="art" loading="lazy"')}</span><b>${esc(x.name)}</b><span class="price">${ic('coin')}${fmt(x.price)}</span></button></li>`;
@@ -795,7 +795,7 @@ function renderShopDetail() {
     const ob = k === 'outbreak' ? D()[G.dailyOutbreak(key)] : null;
     const left = k === 'outbreak' ? Math.max(0, 5 - (save.outbreak.date === key ? save.outbreak.opened : 0)) : null;
     const charm = save.keyItems.shinycharm;
-    const shiny = k === 'outbreak' ? (charm ? '3/64' : '1/64') : (charm ? '3/256' : '1/256');
+    const shiny = k === 'outbreak' ? (charm ? '3/1024' : '1/1024') : (charm ? '3/8192' : '1/8192');
     el.innerHTML = `<div class="art">${pic(img.art(boxArt(k), false), [img.icon(boxArt(k), false)], 'alt="" class="hd"')}</div><h3>${esc(bx.name)}</h3><p>${esc(bx.desc)}${ob ? ' Today: <b>' + esc(ob.name) + '</b>.' : ''}</p>
       <div class="odds">${bx.odds.map(o => `<div class="odds-row"><span>${esc(o[0])}</span><b>${o[1]}%</b></div>`).join('')}
       <div class="odds-row"><span>Shiny${charm ? ' (Shiny Charm)' : ''}</span><b>${shiny}</b></div>
@@ -836,7 +836,7 @@ function openBox(kind, free) {
   if (kind === 'outbreak') save.outbreak.opened++;
   const rng = E.makeRng(Math.floor(Math.random() * 2 ** 32));
   const { species } = G.rollBox(kind, rng, { outbreak: G.dailyOutbreak(key) });
-  const base = kind === 'outbreak' ? 1 / 64 : G.SHINY_BASE;
+  const base = kind === 'outbreak' ? G.SHINY_OUTBREAK : G.SHINY_BASE;
   const p = G.generatePokemon(species, G.boxLevel(kind, topLevel()), { rng, origin: bx.name, shinyRate: base * (save.keyItems.shinycharm ? 3 : 1), perfectIvs: bx.perfectIvs, markContext: markCtx() });
   addToCollection(p);
   save.stats.boxesOpened++; bumpDay('boxesOpened');

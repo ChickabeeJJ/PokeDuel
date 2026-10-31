@@ -209,7 +209,8 @@ export function buildAiMoves(species, level, { useTms = false, rng } = {}) {
 }
 
 // ---------- Pokémon generation ----------
-export const SHINY_BASE = 1 / 256;
+export const SHINY_BASE = 1 / 8192;
+export const SHINY_OUTBREAK = 1 / 1024;
 export function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 export function generatePokemon(species, level, opts = {}) {
   const rng = opts.rng || makeRng(Math.floor(Math.random() * 2 ** 32));
@@ -407,7 +408,7 @@ export function registerEvolutionItems() {
   }
 }
 add('evolution', 'linkingcord', 'Linking Cord', 600, 'Evolves Pokémon that normally evolve by trade.');
-add('key', 'shinycharm', 'Shiny Charm', 25000, 'Triples the chance of shiny Pokémon from boxes (1/256 → 3/256).', { key: true });
+add('key', 'shinycharm', 'Shiny Charm', 25000, 'Triples the chance of shiny Pokémon from boxes (1/8192 → 3/8192).', { key: true });
 add('key', 'markcharm', 'Mark Charm', 8000, 'Triples the chance of Pokémon carrying a mark.', { key: true });
 add('key', 'expshare', 'Exp. Share', 0, 'Party members that sat out a battle still earn 50% Exp. Points. Always on.', { key: true, notForSale: true });
 add('collectible', 'pokeball', 'Poké Ball', 25, 'A collectible. Capture mechanics are not implemented.', { sprite: 'poke-ball' });
@@ -420,26 +421,28 @@ export const REGIONS = { g1: 'Kanto', g2: 'Johto', g3: 'Hoenn', g4: 'Sinnoh', g5
 export const STARTERS_BY_GEN = { 1: [1, 4, 7], 2: [152, 155, 158], 3: [252, 255, 258], 4: [387, 390, 393], 5: [495, 498, 501], 6: [650, 653, 656], 7: [722, 725, 728], 8: [810, 813, 816], 9: [906, 909, 912] };
 const isLegend = d => d.tags?.some(t => /Legendary|Mythical/.test(t));
 const bst = d => d.bs.reduce((a, b) => a + b, 0);
+// Highest base stat total reachable along a species' evolution line.
+function lineBst(d) { return Math.max(bst(d), ...(d.evos || []).map(e => G.dex[e] ? lineBst(G.dex[e]) : 0)); }
 function pool(filter) { return Object.keys(G.dex).filter(id => filter(G.dex[id])); }
 const poolCache = {};
 export function boxPool(kind) {
   if (poolCache[kind]) return poolCache[kind];
   let p;
   if (kind === 'starter') p = Object.values(STARTERS_BY_GEN).flat().map(n => G.numToId[n]);
-  else if (kind === 'basic') p = pool(d => !isLegend(d));
-  else if (kind === 'rare') p = pool(d => !isLegend(d) && bst(d) >= 480);
-  else if (kind === 'legend') p = pool(d => isLegend(d));
-  else if (BOX_RANGES[kind]) p = pool(d => d.num >= BOX_RANGES[kind][0] && d.num <= BOX_RANGES[kind][1] && !isLegend(d));
+  else if (kind === 'basic') p = pool(d => !isLegend(d) && !d.prevo);
+  else if (kind === 'rare') p = pool(d => !isLegend(d) && !d.prevo && (d.evos ? lineBst(d) >= 500 : bst(d) >= 480));
+  else if (kind === 'legend') p = pool(d => isLegend(d) && !d.prevo);
+  else if (BOX_RANGES[kind]) p = pool(d => d.num >= BOX_RANGES[kind][0] && d.num <= BOX_RANGES[kind][1] && !isLegend(d) && !d.prevo);
   return poolCache[kind] = p || [];
 }
 export const BOXES = {
   starter: { name: 'Starter Box', price: 180, desc: 'A first-partner Pokémon from any of the nine generations.', odds: [['Starter Pokémon (27)', 100, 'starter']], art: 1 },
   basic: { name: 'Basic Box', price: 120, desc: 'Any non-legendary Pokémon from the National Pokédex.', odds: [['Non-legendary National Dex', 100, 'basic']], art: 52 },
-  rare: { name: 'Rare Box', price: 350, desc: 'Strong, fully evolved Pokémon (base stat total 480+).', odds: [['BST 480+ non-legendary', 95, 'rare'], ['Legendary or Mythical', 5, 'legend']], art: 149, perfectIvs: 1 },
-  master: { name: 'Master Box', price: 700, desc: 'High chance of a Legendary or Mythical Pokémon.', odds: [['Legendary or Mythical', 40, 'legend'], ['BST 480+ non-legendary', 40, 'rare'], ['Non-legendary National Dex', 20, 'basic']], art: 1007, perfectIvs: 2 },
+  rare: { name: 'Rare Box', price: 350, desc: 'Pokémon from the strongest evolution lines, such as pseudo-legendaries.', odds: [['Strong lines (final form BST 500+)', 95, 'rare'], ['Legendary or Mythical', 5, 'legend']], art: 147, perfectIvs: 1 },
+  master: { name: 'Master Box', price: 700, desc: 'High chance of a Legendary or Mythical Pokémon.', odds: [['Legendary or Mythical', 40, 'legend'], ['Strong lines (final form BST 500+)', 40, 'rare'], ['Non-legendary National Dex', 20, 'basic']], art: 1007, perfectIvs: 2 },
 };
 for (const [k, n] of Object.entries(REGIONS)) BOXES[k] = { name: n + ' Box', price: 150, desc: 'A non-legendary Pokémon from ' + n + ' (No. ' + BOX_RANGES[k].join('–') + ').', odds: [[n + ' non-legendary', 100, k]], art: BOX_RANGES[k][0] + 3, region: true };
-BOXES.outbreak = { name: 'Outbreak Box', price: 90, desc: 'Today\'s mass-outbreak species, with boosted shiny odds (1/64). Max 5 per day.', odds: [['Today\'s outbreak species', 100, 'outbreak']], daily: 5 };
+BOXES.outbreak = { name: 'Outbreak Box', price: 90, desc: 'Today\'s mass-outbreak species, with boosted shiny odds (1/1024). Max 5 per day.', odds: [['Today\'s outbreak species', 100, 'outbreak']], daily: 5 };
 export function rollBox(kind, rng, ctx = {}) {
   const box = BOXES[kind];
   let r = rng.next() * 100, sub = box.odds[box.odds.length - 1][2];
@@ -480,23 +483,24 @@ export const CHECKIN_REWARDS = [
   { day: 7, box: 'rare', text: 'Free Rare Box' },
 ];
 export const DAILY_TIERS = {
-  easy: { name: 'Warm-Up', size: 1, coins: 60, ai: 'easy', bst: [250, 420], levelOffset: -2, base: 100 },
-  medium: { name: 'Rival Test', size: 2, coins: 110, ai: 'medium', bst: [400, 500], levelOffset: 0, base: 200 },
-  hard: { name: 'Ace Challenge', size: 3, coins: 200, ai: 'hard', bst: [480, 600], levelOffset: 3, base: 400 },
+  easy: { name: 'Warm-Up', size: 1, coins: 60, ai: 'easy', bst: [250, 420], level: 11, base: 100 },
+  medium: { name: 'Rival Test', size: 2, coins: 110, ai: 'medium', bst: [400, 500], level: 36, base: 200 },
+  hard: { name: 'Ace Challenge', size: 3, coins: 200, ai: 'hard', bst: [480, 600], level: 70, base: 400 },
   practice: { name: 'Practice', size: 1, coins: 25, ai: 'medium', bst: [250, 520], levelOffset: -1, base: 0 },
 };
 export const RIVAL_NAMES = ['Ace Trainer Mira', 'Rival Theo', 'Gym Trainer Ines', 'Veteran Kofi', 'Ace Trainer Rin', 'Battle Girl Ada', 'Scientist Pell', 'Rival Juno', 'Dragon Tamer Vey', 'Ace Trainer Sol'];
 export function buildTrainer(tier, key, partyTop) {
   const t = DAILY_TIERS[tier];
   const r = tier === 'practice' ? makeRng(Math.floor(Math.random() * 2 ** 32)) : dailyRng(key, tier);
-  const level = Math.max(5, Math.min(100, (partyTop || 10) + t.levelOffset + (tier === 'practice' ? r.int(3) - 1 : 0)));
+  // Daily tiers use fixed levels (the same for every player); practice scales to your party.
+  const level = t.level || Math.max(5, Math.min(100, (partyTop || 10) + t.levelOffset + r.int(3) - 1));
   const sunday = new Date(key + 'T12:00:00').getDay() === 0;
   let candidates = pool(d => !isLegend(d) && bst(d) >= t.bst[0] && bst(d) <= t.bst[1] && (level >= 30 || !d.evos || bst(d) < 500));
   const team = [];
   for (let i = 0; i < t.size; i++) {
     let species = r.pick(candidates);
     if (tier === 'hard' && i === t.size - 1 && sunday) species = r.pick(boxPool('legend'));
-    const p = generatePokemon(species, level + (tier === 'hard' && i === t.size - 1 ? 2 : 0), { rng: r, noMark: true, shinyRate: 1 / 512, perfectIvs: tier === 'hard' ? 3 : tier === 'medium' ? 1 : 0, origin: 'trainer' });
+    const p = generatePokemon(species, level, { rng: r, noMark: true, shinyRate: SHINY_BASE, perfectIvs: tier === 'hard' ? 3 : tier === 'medium' ? 1 : 0, origin: 'trainer' });
     p.moves = buildAiMoves(species, p.level, { useTms: tier === 'hard', rng: r });
     if (tier !== 'easy') { const spread = Math.min(510, level * 6); const best = G.dex[species].bs[1] > G.dex[species].bs[3] ? 'atk' : 'spa'; p.evs[best] = Math.min(252, spread / 2); p.evs.spe = Math.min(252, spread / 2); }
     if (tier === 'hard') p.item = r.pick(['leftovers', 'lifeorb', 'sitrusberry', 'expertbelt', 'focussash', 'choicescarf', 'rockyhelmet', 'weaknesspolicy']);

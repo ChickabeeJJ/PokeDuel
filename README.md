@@ -1,6 +1,6 @@
 # PokeDuel
 
-A browser-based daily Pokémon battle game: three seeded daily battles, unlimited practice, collecting, training, and leaderboards. It is a static site with no build step.
+A browser-based daily Pokémon battle game: three seeded daily battles at fixed levels (Lv. 11, 36 and 70), unlimited practice, collecting, training, and leaderboards. It is a static site with no build step.
 
 ## Run locally
 
@@ -12,7 +12,7 @@ Serve the folder with any static server, for example `npx serve .` or `python3 -
 - **Move numbers use the Pokémon Champions balance layer**: base power, accuracy, PP and secondary-effect changes, PP capped at 20, paralysis at 1/8, sleep for 2–3 turns, and freeze that thaws within 3 turns.
   - 770 of 851 moves are fully simulated; the rest are labelled "simplified" in the UI.
   - Battles also show a damage preview, type-effectiveness hints and a Tera toggle.
-- **Collection**: every Pokémon rolls a nature, IVs (shown with the Judge wording), ability (5% Hidden), gender, size and Tera Type. Pokémon can be **shiny** (1/256, or 1/64 in the daily Outbreak Box, with the Shiny Charm tripling either rate) and can carry **marks** with titles such as "the Peckish". The marks are rare, personality, time-of-day, daily-weather, Jumbo/Mini, Partner and Mightiest.
+- **Collection**: every Pokémon rolls a nature, IVs (shown with the Judge wording), ability (5% Hidden), gender, size and Tera Type. Pokémon can be **shiny** (1/8192, or 1/1024 in the daily Outbreak Box, with the Shiny Charm tripling either rate) and can carry **marks** with titles such as "the Peckish". The marks are rare, personality, time-of-day, daily-weather, Jumbo/Mini, Partner and Mightiest.
 - **Training**:
   - EVs come from defeated Pokémon (with Power items and Macho Brace), vitamins and feathers. Mints, Bottle Caps (Hyper Training), Ability Capsules/Patches and Tera Shards are also available.
   - Experience uses each species' official growth curve, with Exp. Candies and Rare Candies.
