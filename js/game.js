@@ -560,7 +560,7 @@ export function defaultSave() {
     box: [], party: [], inventory: { potion: 3, superpotion: 1, expcandys: 1 }, keyItems: { expshare: true },
     dailyDate: todayKey(), daily: { easy: null, medium: null, hard: null }, outbreak: { date: '', opened: 0 },
     checkin: { last: '', streak: 0, best: 0 }, missions: { date: '', list: [], bonus: false },
-    wins: 0, battles: 0, practiceCount: 0, ownedDex: [], seenDex: [], shinyDex: [], medals: {}, showcase: [],
+    wins: 0, battles: 0, practiceCount: 0, ownedDex: [], seenDex: [], shinyDex: [], medals: {}, showcase: [], friends: [],
     stats: { kos: 0, superEffective: 0, crits: 0, boxesOpened: 0, evolutions: 0, dailySweeps: 0, teraWins: 0, damageDealt: 0, statusMoves: 0, trainingItems: 0, teraUsed: 0, practiceWins: 0, dailyWins: 0 },
     dayStats: { date: '', values: {} }, history: [], dailyScores: {}, journey: { cleared: {} },
     ledger: { start: 300, earned: 0, spent: 0, expGranted: 0, pokemonGranted: 0, practiceCoins: { date: '', wins: 0 } },
@@ -639,6 +639,8 @@ export function migrateSave(raw) {
   s.checkin = { ...base.checkin, ...(raw.checkin || {}) };
   s.missions = { ...base.missions, ...(raw.missions || {}) };
   s.outbreak = { ...base.outbreak, ...(raw.outbreak || {}) };
+  s.friends = (Array.isArray(raw.friends) ? raw.friends : []).filter(f => f && typeof f.uid === 'string' && /^[A-Za-z0-9]{6,128}$/.test(f.uid)).slice(0, 100)
+    .map(f => ({ uid: f.uid, name: String(f.name || 'Trainer').slice(0, 16), avatar: Math.round(num(f.avatar, 25, 1, 1025)) }));
   s.journey = { cleared: raw.journey && typeof raw.journey.cleared === 'object' && raw.journey.cleared ? { ...raw.journey.cleared } : {} };
   s.settings = { ...base.settings, ...(raw.settings || {}) };
   s.medals = typeof raw.medals === 'object' && raw.medals ? raw.medals : {};

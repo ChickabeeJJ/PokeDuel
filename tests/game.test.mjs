@@ -197,3 +197,13 @@ test('paldea box: paradox Pokémon only come from the rare 4% sub-pool', () => {
   assert.ok(n > 600 && n < 1000, String(n));
   assert.equal(G.BOXES.master.price, 10000);
 });
+
+test('friends list survives migration and is sanitised', () => {
+  const base = G.defaultSave();
+  assert.deepEqual(base.friends, []);
+  const s = G.migrateSave({ ...base, friends: [{ uid: 'abcDEF123456', name: 'Ash<script>Ketchum-long-name', avatar: 9999 }, { uid: 'bad id!' }, null, { uid: 42 }] });
+  assert.equal(s.friends.length, 1);
+  assert.equal(s.friends[0].uid, 'abcDEF123456');
+  assert.equal(s.friends[0].name.length, 16);
+  assert.equal(s.friends[0].avatar, 1025);
+});

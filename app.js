@@ -232,7 +232,9 @@ async function startFirebaseAuth() {
     finally { btn.disabled = false; }
   });
   fb.onAuthStateChanged(auth, async user => {
+    if (currentUser?.uid !== user?.uid) { ui.friendData = null; ui.friendsState = null; }
     currentUser = user; authReady = true; renderAuthState();
+    if (activeScreen === 'profile') renderFriends();
     if (user) await syncSignedInUser(user); else setAuthStatus('Not signed in. Progress stays on this device.');
     if (activeScreen === 'leaderboard') renderRanks();
   });
@@ -244,11 +246,21 @@ const rankName = score => RANKS.filter(r => score >= r[0]).pop()[1];
 const trainerName = () => save.trainerName || 'Trainer';
 function leaderboardDoc() {
   const showcase = (save.showcase.length ? save.showcase : save.party.slice(0, 3)).map(u => save.box.find(p => p.uid === u)).filter(Boolean).slice(0, 3)
-    .map(p => ({ num: sp(p).num, shiny: !!p.shiny, level: p.level, mark: p.mark || null }));
+    .map(showcaseEntry);
   const daily = {};
   for (const [k, v] of Object.entries(save.dailyScores || {})) if (G.dayDiff(k, G.todayKey()) <= 2) daily[k] = v;
   return { name: trainerName().slice(0, 16), avatar: save.avatar || 25, score: G.trainerScore(save), wins: save.wins, dex: save.ownedDex.length, shinies: save.shinyDex.length,
     streak: save.checkin.best || 0, showcase, daily, updatedAt: fb.serverTimestamp() };
+}
+// What other trainers see of a showcased Pokémon (read-only copy).
+function showcaseEntry(p) {
+  return { num: sp(p).num, shiny: !!p.shiny, level: p.level, mark: p.mark || null, nick: (p.nickname || '').slice(0, 12), gender: p.gender || 'N',
+    nature: p.mint || p.nature, ability: p.ability, item: p.item || null, tera: p.teraType, ivs: G.effectiveIvs(p), evs: { ...p.evs }, moves: p.moves.slice(0, 4) };
+}
+function localProfile() {
+  const showcase = (save.showcase.length ? save.showcase : save.party.slice(0, 3)).map(byUid).filter(Boolean).slice(0, 3).map(showcaseEntry);
+  return { id: currentUser?.uid || 'me', name: trainerName(), avatar: save.avatar || 25, score: G.trainerScore(save), wins: save.wins, dex: save.ownedDex.length, shinies: save.shinyDex.length,
+    streak: save.checkin.best || 0, showcase, daily: { [G.todayKey()]: save.dailyScores?.[G.todayKey()] || 0 } };
 }
 function scheduleLeaderboard() {
   clearTimeout(lbTimer);
@@ -264,7 +276,7 @@ async function renderRanks() {
   $('#rankTabs').innerHTML = Object.entries(RANK_TABS).map(([k, v]) => `<button role="tab" data-rank="${k}" class="${ui.rankTab === k ? 'on' : ''}" aria-selected="${ui.rankTab === k}">${v[0]}</button>`).join('');
   const body = $('#rankBody');
   const mine = { score: G.trainerScore(save), today: save.dailyScores?.[G.todayKey()] || 0, shinies: save.shinyDex.length, dex: save.ownedDex.length }[ui.rankTab];
-  const meCard = `<div class="rank-row me"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b></span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
+  const meCard = `<div class="rank-row me" role="button" tabindex="0" data-trainer="me" aria-label="View your profile"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b></span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
   if (ui.firebaseDown) { body.innerHTML = meCard + '<div class="empty"><b>Leaderboards unavailable</b><p>Firebase could not be reached. Check your connection and reload.</p></div>'; return; }
   if (!currentUser) { body.innerHTML = meCard + `<div class="empty"><b>Sign in to compete</b><p>Leaderboards use your trainer name and scores only. Sign in with Google on the Trainer Card to publish your score.</p><button class="btn primary" data-go="profile">Go to Trainer Card</button></div>`; return; }
   const unrankedNote = ranked() ? '' : `<div class="integrity">${ic('warn')}<div><b>Your save is unranked</b>, so your score isn't published. See the Trainer Card for details.</div></div>`;
@@ -274,11 +286,12 @@ async function renderRanks() {
     const order = ui.rankTab === 'today' ? fb.orderBy(new fb.FieldPath('daily', G.todayKey()), 'desc') : fb.orderBy(field, 'desc');
     const snap = await fb.getDocs(fb.query(fb.collection(db, 'leaderboard'), order, fb.limit(50)));
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    ui.rankRows = rows;
     if (!rows.length) { body.innerHTML = meCard + '<div class="empty">No scores yet today. Be the first!</div>'; return; }
     body.innerHTML = meCard + unrankedNote + rows.map((r, i) => {
       const v = ui.rankTab === 'today' ? r.daily?.[G.todayKey()] || 0 : r[field] || 0;
       const sc = (r.showcase || []).map(s => iconOf(s.num, s.shiny)).join('');
-      return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b><span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
+      return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}" role="button" tabindex="0" data-trainer="${i}" aria-label="View ${esc(r.name || 'Trainer')}'s profile"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b><span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
     }).join('');
   } catch (err) {
     console.error('Leaderboard load failed', err);
@@ -1013,6 +1026,7 @@ function renderProfile() {
     <div class="section-title"><h2>Showcase</h2><span class="muted">Shown on leaderboards</span></div>
     <div class="showcase-slots">${[0, 1, 2].map(i => { const p = show[i]; return p ? `<button class="showcase-slot filled" data-showslot="${i}">${artOf(sp(p).num, p.shiny)}<b>${esc(G.displayName(p))}${p.shiny ? shinyIc() : ''}</b><small>Lv. ${p.level} · ${E.STATS.filter(k => p.ivs[k] === 31).length}× Best IV</small></button>` : `<button class="showcase-slot" data-showslot="${i}"><span class="muted">${ic('plus')} Add a Pokémon</span></button>`; }).join('')}</div>
     <div class="row-btns"><button class="btn ghost" id="shareCard">${ic('copy')}Copy trainer card text</button></div>`;
+  renderFriends();
   $('#animationsToggle').checked = !!save.settings.animations;
   $('#effectsToggle').checked = !!save.settings.reducedEffects;
   $('#damageToggle').checked = save.settings.showDamage !== false;
@@ -1102,6 +1116,119 @@ function showAvatarPicker() {
     if (activeScreen === 'profile') renderProfile();
     toast(D()[G.gameData.numToId[save.avatar]].name + ' is your new profile picture.');
   });
+}
+
+// ---------- Trainer profiles and friends ----------
+// Any leaderboard entry or friend opens a profile with their three showcase
+// Pokémon; each of those opens a read-only summary. Friends are stored in the
+// save (synced with it) and looked up by a short friend code.
+const friendCode = uid => (uid || '').slice(0, 10);
+const isFriend = uid => save.friends.some(f => f.uid === uid);
+function showTrainer(r) {
+  if (!r) return;
+  const self = r.id === 'me' || r.id === currentUser?.uid;
+  const today = r.daily?.[G.todayKey()] || 0;
+  const show = (r.showcase || []).slice(0, 3);
+  const friendBtn = self || !currentUser || r.id === 'me' ? '' : isFriend(r.id)
+    ? `<button class="btn ghost small" id="tpFriend" data-mode="remove">${ic('close')}Remove friend</button>`
+    : `<button class="btn primary small" id="tpFriend" data-mode="add">${ic('plus')}Add friend</button>`;
+  showModal(`<div class="tp-head">${pic(img.art(Number(r.avatar) || 25, false), [img.icon(Number(r.avatar) || 25, false)], 'class="tc-avatar" alt=""')}
+      <div><div class="eyebrow">${esc(rankName(r.score || 0))}${self ? ' · You' : isFriend(r.id) ? ' · Friend' : ''}</div><h2 id="modalTitle">${esc(r.name || 'Trainer')}</h2>
+      ${self || r.id === 'me' ? '' : `<small class="muted">Friend code ${esc(friendCode(r.id))}</small>`}<div class="row-btns" style="margin-top:8px">${friendBtn}</div></div></div>
+    ${r.missing ? '<div class="empty"><b>Profile not found</b><p>This trainer hasn\'t published a profile yet, or their save is unranked.</p></div>' : `
+    <div class="tc-stats tp-stats"><div><small>Trainer score</small><b>${fmt(r.score || 0)}</b></div><div><small>Wins</small><b>${fmt(r.wins || 0)}</b></div><div><small>Pokédex</small><b>${r.dex || 0}</b></div><div><small>Shiny species</small><b>${r.shinies || 0}</b></div><div><small>Best streak</small><b>${r.streak || 0} days</b></div><div><small>Today</small><b>${fmt(today)} pts</b></div></div>
+    <div class="section-title"><h2>Showcase</h2><span class="muted">Select a Pokémon for details</span></div>
+    <div class="showcase-slots">${[0, 1, 2].map(i => { const s = show[i]; if (!s) return '<div class="showcase-slot vacant"><small>Empty slot</small></div>';
+      const d = D()[G.gameData.numToId[s.num]]; return `<button class="showcase-slot filled" data-tpmon="${i}">${artOf(s.num, s.shiny, d?.name || '')}<b>${esc(s.nick || d?.name || '?')}${s.shiny ? shinyIc() : ''}</b><small>Lv. ${s.level}${s.mark && G.MARKS[s.mark] ? ' · ' + esc(G.MARKS[s.mark].title) : ''}</small></button>`; }).join('')}</div>`}`, { wide: true });
+  $$('#modalContent [data-tpmon]').forEach(b => b.onclick = () => showShowcaseMon(r, +b.dataset.tpmon));
+  const fbtn = $('#tpFriend');
+  if (fbtn) fbtn.onclick = () => { if (fbtn.dataset.mode === 'add') addFriend(r); else removeFriend(r.id); showTrainer(r); };
+}
+function showShowcaseMon(r, i) {
+  const s = r.showcase[i], id = G.gameData.numToId[s.num], d = D()[id];
+  if (!d) return;
+  const name = s.nick || d.name;
+  const row = (k, v) => v ? `<div class="odds-row"><span>${k}</span><b>${v}</b></div>` : '';
+  const ab = E.data.abilities?.[s.ability]?.name || s.ability;
+  const detailed = !!s.ivs;
+  showModal(`<button class="btn ghost small" id="tpBack">${ic('chev-l')}${esc(r.name || 'Trainer')}'s card</button>
+    <div class="tp-mon"><div class="tp-art">${artOf(d.num, s.shiny, d.name)}</div>
+      <div><div class="eyebrow">${esc(r.name || 'Trainer')}'s showcase</div><h2 id="modalTitle">${esc(name)}${genderIcon(s.gender)}${s.shiny ? shinyIc() : ''}</h2>
+        <p class="muted">${s.nick ? esc(d.name) + ' · ' : ''}No. ${String(d.num).padStart(4, '0')} · Lv. ${s.level}</p>
+        <div class="types" style="gap:6px;margin-top:6px">${d.types.map(t => `<span class="type ${tclass(t)}">${esc(t)}</span>`).join('')}</div></div></div>
+    ${detailed ? `<div class="odds">${row('Nature', esc(String(s.nature || '').replace(/^./, c => c.toUpperCase())))}${row('Ability', esc(ab || ''))}${row('Held item', s.item ? esc(G.ITEMS[s.item]?.name || s.item) : 'None')}${row('Tera Type', s.tera ? `<span class="type ${tclass(s.tera)}">${esc(s.tera)}</span>` : '')}${row('Mark', s.mark && G.MARKS[s.mark] ? esc(G.MARKS[s.mark].name) + ' · “' + esc(G.MARKS[s.mark].title) + '”' : '')}</div>
+    <table class="stat-table"><tr><th>Stat</th><th>Base</th><th>IV</th><th>EV</th></tr>${E.STATS.map((k, j) => `<tr><td>${STAT_LABEL[k]}</td><td>${d.bs[j]}</td><td>${s.ivs[k] ?? '?'} <small class="muted">${s.ivs[k] !== undefined ? G.ivJudge(s.ivs[k]) : ''}</small></td><td>${s.evs?.[k] || 0} <span class="ev-bar"><i style="width:${(s.evs?.[k] || 0) / 252 * 100}%"></i></span></td></tr>`).join('')}</table>
+    <div class="section-title" style="margin-top:16px"><h2>Moves</h2></div><div class="move-list">${(s.moves || []).map(moveRow).join('') || '<p class="muted">No moves shared.</p>'}</div>`
+    : '<div class="empty"><b>Details not shared yet</b><p>This trainer last synced before detailed showcases existed. Their full stats appear after their next sync.</p></div>'}`, { wide: true });
+  $('#tpBack').onclick = () => showTrainer(r);
+}
+function addFriend(r) {
+  if (!r?.id || r.id === currentUser?.uid || isFriend(r.id)) return;
+  if (save.friends.length >= 100) { toast('Your friends list is full (100).'); return; }
+  save.friends.push({ uid: r.id, name: String(r.name || 'Trainer').slice(0, 16), avatar: Number(r.avatar) || 25 });
+  ui.friendData = { ...(ui.friendData || {}), [r.id]: r };
+  persist(); toast((r.name || 'Trainer') + ' added to your friends.');
+  if (activeScreen === 'profile') renderFriends();
+}
+function removeFriend(uid) {
+  const f = save.friends.find(x => x.uid === uid); if (!f) return;
+  save.friends = save.friends.filter(x => x.uid !== uid);
+  persist(); toast(f.name + ' removed from your friends.');
+  if (activeScreen === 'profile') renderFriends();
+}
+async function loadFriends(force) {
+  if (!currentUser || !fb || !db || !save.friends.length) return;
+  if (ui.friendsState === 'loading') return;
+  if (!force && ui.friendsState === 'ok' && Date.now() - (ui.friendsAt || 0) < 60000) return;
+  ui.friendsState = 'loading'; renderFriends(true);
+  try {
+    const snaps = await Promise.all(save.friends.map(f => fb.getDoc(fb.doc(db, 'leaderboard', f.uid))));
+    ui.friendData = {};
+    snaps.forEach((snap, i) => {
+      const f = save.friends[i]; if (!f) return;
+      if (snap.exists()) { const r = { id: f.uid, ...snap.data() }; ui.friendData[f.uid] = r; f.name = String(r.name || f.name).slice(0, 16); f.avatar = Number(r.avatar) || f.avatar; }
+    });
+    ui.friendsState = 'ok'; ui.friendsAt = Date.now();
+  } catch (err) { console.warn('Friends load failed', err); ui.friendsState = 'error'; ui.friendsError = authErrorMessage(err); }
+  if (activeScreen === 'profile') renderFriends(true);
+}
+function renderFriends(skipLoad) {
+  const el = $('#friendsCard'); if (!el) return;
+  const head = `<div class="section-title"><h2>Friends</h2><span class="muted">${save.friends.length} / 100</span></div>`;
+  if (!currentUser) { el.innerHTML = head + `<div class="empty"><b>Sign in to add friends</b><p>Friends use your Google sign-in, so you can follow each other's scores and showcases. Sign in under Account.</p></div>`; return; }
+  const code = friendCode(currentUser.uid);
+  const add = `<div class="friend-tools"><div class="friend-code"><small>Your friend code</small><b>${esc(code)}</b><button class="btn ghost small" id="copyFriendCode">${ic('copy')}Copy</button></div>
+    <form class="friend-add" id="friendAdd"><input id="friendCodeInput" placeholder="Enter a friend code" maxlength="28" autocomplete="off" spellcheck="false" aria-label="Friend code"><button class="btn primary small" type="submit">${ic('plus')}Add</button></form>
+    <p class="muted friend-msg" id="friendMsg" aria-live="polite"></p></div>`;
+  let list;
+  if (!save.friends.length) list = `<div class="empty"><b>No friends yet</b><p>Share your code, enter a friend's code, or open someone on the leaderboard and choose Add friend.</p></div>`;
+  else if (ui.friendsState === 'loading' && !ui.friendData) list = '<div class="loading"><span class="spinner"></span>Loading friends…</div>';
+  else {
+    const day = G.todayKey();
+    list = (ui.friendsState === 'error' ? `<div class="integrity">${ic('warn')}<div><b>Couldn't refresh friends.</b> ${esc(ui.friendsError || '')} <button class="btn ghost small" id="friendsRetry">Try again</button></div></div>` : '')
+      + `<div class="friend-list">${save.friends.map(f => { const r = ui.friendData?.[f.uid];
+        return `<div class="friend-row" role="button" tabindex="0" data-friend="${esc(f.uid)}" aria-label="View ${esc(f.name)}'s profile">${iconOf(f.avatar, false)}<span class="fr-name"><b>${esc(f.name)}</b><small>${r ? esc(rankName(r.score || 0)) + ' · ' + fmt(r.score || 0) + ' TP' : ui.friendsState === 'ok' ? 'No public profile' : '…'}</small></span>
+          <span class="fr-today"><small>Today</small><b>${r ? fmt(r.daily?.[day] || 0) : '–'}</b></span><span class="fr-show">${(r?.showcase || []).map(s => iconOf(s.num, s.shiny)).join('')}</span></div>`; }).join('')}</div>`;
+  }
+  el.innerHTML = head + add + list;
+  $('#copyFriendCode').onclick = () => navigator.clipboard?.writeText(code).then(() => toast('Friend code copied.'), () => toast('Copy failed. Your code is ' + code));
+  $('#friendsRetry')?.addEventListener('click', () => loadFriends(true));
+  $('#friendAdd').onsubmit = async ev => {
+    ev.preventDefault();
+    const msg = $('#friendMsg'), q = $('#friendCodeInput').value.trim();
+    if (!/^[A-Za-z0-9]{6,28}$/.test(q)) { msg.textContent = 'Friend codes are 10 letters and numbers.'; return; }
+    if (currentUser.uid.startsWith(q)) { msg.textContent = 'That is your own code.'; return; }
+    msg.textContent = 'Looking up…';
+    try {
+      const snap = await fb.getDocs(fb.query(fb.collection(db, 'leaderboard'), fb.orderBy(fb.documentId()), fb.startAt(q), fb.endAt(q + ''), fb.limit(2)));
+      if (!snap.docs.length) { msg.textContent = 'No trainer found with that code. They need to be signed in with a ranked save.'; return; }
+      if (snap.docs.length > 1) { msg.textContent = 'That code matches more than one trainer. Enter a longer code.'; return; }
+      const d = snap.docs[0];
+      if (isFriend(d.id)) { msg.textContent = 'Already on your friends list.'; return; }
+      addFriend({ id: d.id, ...d.data() });
+    } catch (err) { msg.textContent = 'Lookup failed: ' + authErrorMessage(err); }
+  };
+  if (!skipLoad) loadFriends();
 }
 
 // ---------- Export / import ----------
@@ -1635,6 +1762,7 @@ function setupListeners() {
   const fillRange = r => r.style.setProperty('--fill', ((r.value - (r.min || 0)) / ((r.max || 100) - (r.min || 0)) * 100) + '%');
   document.addEventListener('input', e => { if (e.target.matches?.('input[type=range]')) fillRange(e.target); });
   new MutationObserver(() => $$('input[type=range]:not([data-filled])').forEach(r => { r.dataset.filled = '1'; fillRange(r); })).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-trainer],[data-friend]')) { e.preventDefault(); e.target.click(); } });
   document.addEventListener('click', e => {
     const t = e.target.closest('button, [data-go], label') || e.target;
     if (t.closest?.('[data-close]')) { closeModal(true); return; }
@@ -1651,6 +1779,10 @@ function setupListeners() {
     if (e.target.closest('#howToPlay')) { showHowTo(); return; }
     const feat = e.target.closest('[data-feature]'); if (feat) { if (ui.shopCat === feat.dataset.cat) { selectShopItem(feat.dataset.feature); return; } ui.shopCat = feat.dataset.cat; ui.shopSel = feat.dataset.feature; ui.shopQty = 1; renderShop(); return; }
     const rank = e.target.closest('[data-rank]'); if (rank) { ui.rankTab = rank.dataset.rank; renderRanks(); return; }
+    const tr = e.target.closest('[data-trainer]');
+    if (tr) { const k = tr.dataset.trainer; showTrainer(k === 'me' ? localProfile() : ui.rankRows?.[+k]); return; }
+    const fr = e.target.closest('[data-friend]');
+    if (fr) { const f = save.friends.find(x => x.uid === fr.dataset.friend); if (f) showTrainer(ui.friendData?.[f.uid] || { id: f.uid, name: f.name, avatar: f.avatar, missing: true }); return; }
   });
   $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('#modalClose').addEventListener('click', () => closeModal());
