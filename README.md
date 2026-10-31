@@ -26,7 +26,8 @@ Serve the folder with any static server, for example `npx serve .` or `python3 -
   - a shareable emoji result and medals (achievements).
 - **Social**: a Trainer Card with a showcase of three Pokémon, and leaderboards for Trainer Score, today's gauntlet, shinies and Pokédex.
 - **Home** is a single focused daily screen, in the style of daily web games such as PokeDoku. It shows the daily number, progress tiles, a reset countdown, today's three battles, your team, and one row of shortcuts.
-- **Look and feel**: an angular "arcade" design system with original SVG icons (`assets/icons.svg`) and logo (`assets/logo.svg`). No emoji are used. All visible text was measured at WCAG AA contrast.
+- **Start-up**: there is no loading screen. Code and data are preloaded in parallel, and a service worker (`sw.js`) caches them, so repeat visits start in about 0.3 s and work offline.
+- **Look and feel**: a greyscale (black-to-white, hint of blue) angular "arcade" design system with original SVG icons (`assets/icons.svg`) and logo (`assets/logo.svg`). No emoji are used. All visible text was measured at WCAG AA contrast.
 - **Save protection (anti-cheat)**: see the section below.
 - **Saves**:
   - **Local saves** live under `pokeduel-save-v2`. The old v1 save is migrated automatically and left untouched as a backup.

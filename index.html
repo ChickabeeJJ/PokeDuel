@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d1434">
+<meta name="theme-color" content="#16171a">
 <title>PokeDuel — The Daily Battle</title>
 <meta name="description" content="Build your team, train your Pokémon, and take on three daily battles in PokeDuel.">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
@@ -12,18 +12,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700;800&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<!-- Start downloading code and data immediately, in parallel, so there is no loading screen. -->
+<link rel="modulepreload" href="app.js">
+<link rel="modulepreload" href="js/engine.js">
+<link rel="modulepreload" href="js/game.js">
+<link rel="modulepreload" href="js/security.js">
+<link rel="preload" href="data/pokedex.json" as="fetch" crossorigin>
+<link rel="preload" href="data/moves.json" as="fetch" crossorigin>
+<link rel="preload" href="data/learnsets.json" as="fetch" crossorigin>
+<link rel="preload" href="data/abilities.json" as="fetch" crossorigin>
+<link rel="preload" href="assets/manifest.json" as="fetch" crossorigin>
 </head>
-<body class="booting">
-<div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
-  <div class="boot-card">
-    <img src="assets/logo.svg" alt="">
-    <h1 class="logo-type">PokeDuel</h1>
-    <p id="bootMessage" class="muted">Loading Pokémon data…</p>
-    <div class="boot-bar"><i id="bootBar"></i></div>
-    <button id="bootRetry" class="btn primary" hidden>Try again</button>
-  </div>
-</div>
-
+<body>
 <header class="hud" id="hud" hidden>
   <a class="hud-logo" href="#/home" data-go="home" aria-label="PokeDuel home"><img src="assets/logo.svg" alt=""><span>PokeDuel</span></a>
   <button class="hud-trainer" data-go="profile" aria-label="Open trainer card">

@@ -1481,9 +1481,7 @@ function setupListeners() {
 // ---------- Boot ----------
 async function loadData() {
   const files = ['moves', 'pokedex', 'abilities', 'learnsets'];
-  let done = 0;
-  const bar = $('#bootBar');
-  const out = await Promise.all(files.map(f => fetch('data/' + f + '.json').then(r => { if (!r.ok) throw new Error(f + ' ' + r.status); return r.json(); }).then(j => { done++; bar.style.width = (done / files.length * 100) + '%'; return j; })));
+  const out = await Promise.all(files.map(f => fetch('data/' + f + '.json').then(r => { if (!r.ok) throw new Error(f + ' ' + r.status); return r.json(); })));
   const [moves, dex, abilities, learnsets] = out;
   E.setData({ moves, dex, abilities });
   G.setGameData({ dex, moves, learnsets });
@@ -1495,7 +1493,7 @@ async function loadData() {
 const assets = { backgrounds: {}, arenas: {}, tiers: {} };
 async function loadAssetManifest() {
   try {
-    const r = await fetch('assets/manifest.json', { cache: 'no-cache' });
+    const r = await fetch('assets/manifest.json');
     if (!r.ok) return;
     const m = await r.json();
     assets.backgrounds = m.backgrounds || {};
@@ -1505,29 +1503,32 @@ async function loadAssetManifest() {
     if (assets.backgrounds.home) document.body.style.setProperty('--home-bg', `url("assets/backgrounds/${assets.backgrounds.home}")`);
   } catch (e) { /* artwork is optional */ }
 }
+// Inline error state if game data can't be fetched (there is no splash screen).
+function showBootError() {
+  const box = document.createElement('div');
+  box.className = 'boot-error card';
+  box.setAttribute('role', 'alert');
+  box.innerHTML = '<h2>Couldn’t load the game</h2><p class="muted">Check your connection and try again.</p><div class="row-btns"><button class="btn primary" id="bootRetry">Try again</button></div>';
+  $('#app').prepend(box);
+  $('#bootRetry').addEventListener('click', () => { box.remove(); boot(); });
+}
 async function boot() {
-  try { await loadData(); }
-  catch (err) {
-    console.error('Data load failed', err);
-    $('#bootMessage').textContent = 'Could not load game data. Check your connection and try again.';
-    $('#bootRetry').hidden = false;
-    return;
-  }
+  try { await Promise.all([loadData(), loadAssetManifest()]); }
+  catch (err) { console.error('Data load failed', err); showBootError(); return; }
   save = readSave();
   runAudit(save);
   initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
   checkNewDay();
   if (save.settings.reducedEffects) document.body.classList.add('reduced-effects');
-  await loadAssetManifest();
-  setupListeners();
-  document.body.classList.remove('booting');
+  if (!boot.wired) { setupListeners(); boot.wired = true; }
   const start = location.hash.replace('#/', '');
   go(save.starterChosen ? (SCREENS.includes(start) && start !== 'battle' && start !== 'starter' ? start : 'home') : 'starter', { noHash: false });
   checkMedals();
   persist();
   booting = false;
   startFirebaseAuth();
+  // Cache code, data and sprites on the device so later visits start instantly.
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker not registered', e));
 }
-$('#bootRetry').addEventListener('click', () => { $('#bootRetry').hidden = true; $('#bootMessage').textContent = 'Loading Pokémon data…'; boot(); });
 boot();
 })();
