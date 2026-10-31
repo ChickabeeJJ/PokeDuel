@@ -1826,7 +1826,7 @@ function spawnWanderer() {
   im.onload = () => {
     if (!el.isConnected) return;
     // Scale by real species height (Joltik small, Wailord big), measured on the visible pixels.
-    const b = spriteBox(im), targetH = Math.max(22, Math.min(110, 46 * Math.sqrt(d.ht || 1)));
+    const b = spriteBox(im), targetH = Math.max(40, Math.min(110, 52 * Math.sqrt(d.ht || 1)));
     const k = targetH / b.h;
     im.style.width = Math.round(im.naturalWidth * k) + 'px';
     im.style.marginBottom = -Math.round((im.naturalHeight - b.y - b.h) * k) + 'px';
