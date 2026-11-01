@@ -584,7 +584,8 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .modal .row-btns{justify-content:flex-end}
 .reveal{display:grid;justify-items:center;gap:10px;text-align:center}
 .reveal .stage{position:relative;display:grid;place-items:center;width:260px;height:260px}
-.reveal .stage::before{content:"";position:absolute;inset:6%;background:repeating-conic-gradient(rgba(255,255,255,.18) 0 10deg,transparent 10deg 30deg);border-radius:50%;animation:rays 12s linear infinite;mask:radial-gradient(circle,#000000 30%,transparent 70%);-webkit-mask:radial-gradient(circle,#000000 30%,transparent 70%)}
+.reveal .stage::before{content:"";position:absolute;inset:6%;background:repeating-conic-gradient(rgba(255,255,255,.18) 0 10deg,transparent 10deg 30deg);border-radius:50%;animation:raySpin 12s linear infinite;mask:radial-gradient(circle,#000000 30%,transparent 70%);-webkit-mask:radial-gradient(circle,#000000 30%,transparent 70%)}
+@keyframes raySpin{to{transform:rotate(360deg)}}
 .reveal.shiny .stage::before{background:repeating-conic-gradient(rgba(255,226,92,.5) 0 10deg,transparent 10deg 30deg)}
 .reveal .stage img{position:relative;width:230px;height:230px;object-fit:contain;animation:revealIn .7s cubic-bezier(.2,1.4,.4,1)}
 .reveal .crate{position:relative;width:130px;height:130px;background:linear-gradient(135deg,#fff27a,var(--hot) 40%,var(--hot-2));box-shadow:inset 0 -12px 0 rgba(0,0,0,.18);clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px);animation:wobble .5s ease-in-out infinite}
