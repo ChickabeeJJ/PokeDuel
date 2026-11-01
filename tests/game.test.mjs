@@ -220,3 +220,17 @@ test('every save has a stable id that survives migration and reloads', () => {
   // Junk ids are replaced, never trusted.
   assert.equal(G.migrateSave({ ...old, saveId: '../users/x' }).saveId, 'lg20261029081530123');
 });
+
+test('the false "cloud save was edited" flag is cleared once, other reasons stay', () => {
+  const base = { version: 2, createdAt: '2026-10-29T08:15:30.123Z', box: [] };
+  const only = G.migrateSave({ ...base, integrity: { status: 'flagged', reasons: [G.CLOUD_SEAL_REASON] } });
+  assert.equal(only.integrity.status, 'ok');
+  assert.deepEqual(only.integrity.reasons, []);
+  assert.equal(only.sealFix1, true);
+  const mixed = G.migrateSave({ ...base, integrity: { status: 'flagged', reasons: [G.CLOUD_SEAL_REASON, 'Coin balance does not match the coin ledger.'] } });
+  assert.equal(mixed.integrity.status, 'flagged');
+  assert.deepEqual(mixed.integrity.reasons, ['Coin balance does not match the coin ledger.']);
+  // After the one-time fix, a new flag with the same reason is kept.
+  const later = G.migrateSave({ ...base, sealFix1: true, integrity: { status: 'flagged', reasons: [G.CLOUD_SEAL_REASON] } });
+  assert.equal(later.integrity.status, 'flagged');
+});

@@ -616,6 +616,7 @@ function cleanInstance(p) {
   out.battles = Math.round(num(p.battles)); out.wins = Math.round(num(p.wins));
   return out;
 }
+export const CLOUD_SEAL_REASON = 'Cloud save was edited outside the game.';
 // Accepts v1 (ChatGPT prototype) and v2 saves. Returns null if unusable.
 export function migrateSave(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -639,6 +640,14 @@ export function migrateSave(raw) {
   }
   if (raw.version !== 1 && raw.version !== SAVE_VERSION && raw.migratedFrom !== 1) return null;
   const s = { ...base, ...raw, version: SAVE_VERSION };
+  // Cloud uploads used to copy the save with the seal from its last local write,
+  // so any change in between made honest cloud saves look edited. That false
+  // flag is cleared once; the audit below still checks the real numbers.
+  if (!raw.sealFix1 && raw.integrity?.reasons?.includes(CLOUD_SEAL_REASON)) {
+    const reasons = raw.integrity.reasons.filter(r => r !== CLOUD_SEAL_REASON);
+    raw = { ...raw, integrity: reasons.length ? { ...raw.integrity, reasons } : { status: 'ok', reasons: [] } };
+  }
+  s.sealFix1 = true;
   s.saveId = typeof raw.saveId === 'string' && SAVE_ID_RE.test(raw.saveId) ? raw.saveId : legacySaveId(raw.createdAt);
   s.box = (Array.isArray(raw.box) ? raw.box : []).map(cleanInstance).filter(Boolean);
   const uids = new Set(s.box.map(p => p.uid));

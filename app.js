@@ -221,6 +221,7 @@ function authErrorMessage(error) {
   if (code === 'permission-denied' || code === 'firestore/permission-denied') return 'Firestore denied the request. Publish the rules in firestore.rules (users, saveClaims and leaderboard).';
   return error?.message || 'Something went wrong. Check the browser console for details.';
 }
+const CLOUD_SCHEMA = 4;
 const isPermissionError = err => /permission-denied/.test(err?.code || '');
 // Ties a saveId to one account. 'ok' = this account owns it, 'taken' = another
 // account does, 'unchecked' = the saveClaims rules aren't published yet (the
@@ -238,7 +239,8 @@ async function claimSave(uid, saveId) {
   }
 }
 function writeCloudSave(user, snapshotSave) {
-  const snapshot = JSON.parse(JSON.stringify(snapshotSave));
+  // Seal the copy that is uploaded, so the cloud seal always matches the cloud data.
+  const snapshot = S.applySeal(JSON.parse(JSON.stringify(snapshotSave)));
   const op = async () => {
     // Never upload a save that this account doesn't own on this device.
     if (localOwner() !== user.uid) return;
@@ -248,7 +250,7 @@ function writeCloudSave(user, snapshotSave) {
       if (await claimSave(user.uid, snapshot.saveId) === 'taken') throw new Error('This save is registered to another account, so it was not uploaded.');
       ui.claimedKey = key;
     }
-    await fb.setDoc(fb.doc(db, 'users', user.uid), { schemaVersion: 3, saveId: snapshot.saveId, saveData: snapshot, displayName: user.displayName || null, email: user.email || null, photoURL: user.photoURL || null, updatedAt: fb.serverTimestamp() }, { merge: true });
+    await fb.setDoc(fb.doc(db, 'users', user.uid), { schemaVersion: CLOUD_SCHEMA, saveId: snapshot.saveId, saveData: snapshot, displayName: user.displayName || null, email: user.email || null, photoURL: user.photoURL || null, updatedAt: fb.serverTimestamp() }, { merge: true });
     try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now())); } catch (e) {}
   };
   cloudWriteQueue = cloudWriteQueue.then(op, op);
@@ -290,7 +292,8 @@ async function syncSignedInUser(user) {
       const data = snap.data();
       remote = G.migrateSave(data.saveData);
       if (!remote) throw new Error('The cloud save format is missing or unsupported. Nothing on this device was deleted.');
-      if (data.saveData?.seal && !S.verifySeal(data.saveData)) flag(remote, 'Cloud save was edited outside the game.');
+      // Only uploads sealed at upload time (schema 4+) can be checked; older ones had stale seals.
+      if ((data.schemaVersion || 0) >= CLOUD_SCHEMA && data.saveData?.seal && !S.verifySeal(data.saveData)) flag(remote, G.CLOUD_SEAL_REASON);
       runAudit(remote);
       cloudAt = Number(data.updatedAt?.toMillis?.() || Date.parse(remote.lastActive || '') || 0);
     }
@@ -468,6 +471,11 @@ async function startFirebaseAuth() {
 
 // ---------- Leaderboards (Firestore /leaderboard/{uid}) ----------
 const RANKS = [[0, 'Rookie'], [600, 'Trainer'], [2000, 'Ace Trainer'], [6000, 'Veteran'], [15000, 'Elite'], [40000, 'Champion']];
+// The game's owner gets an Owner badge. Keyed by account id (friend code
+// prefix), which other players can't fake, rather than by email.
+const OWNER_IDS = ['CTdyL3C7se'];
+const isOwnerId = id => typeof id === 'string' && OWNER_IDS.some(p => id.startsWith(p));
+const ownerBadge = id => isOwnerId(id) ? `<span class="owner-badge" title="PokeDuel owner">${ic('crown')}Owner</span>` : '';
 const rankName = score => RANKS.filter(r => score >= r[0]).pop()[1];
 const trainerName = () => save.trainerName || 'Trainer';
 function leaderboardDoc() {
@@ -502,7 +510,7 @@ async function renderRanks() {
   $('#rankTabs').innerHTML = Object.entries(RANK_TABS).map(([k, v]) => `<button role="tab" data-rank="${k}" class="${ui.rankTab === k ? 'on' : ''}" aria-selected="${ui.rankTab === k}">${v[0]}</button>`).join('');
   const body = $('#rankBody');
   const mine = { score: G.trainerScore(save), today: save.dailyScores?.[G.todayKey()] || 0, shinies: save.shinyDex.length, dex: save.ownedDex.length }[ui.rankTab];
-  const meCard = `<div class="rank-row me" role="button" tabindex="0" data-trainer="me" aria-label="View your profile"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b></span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
+  const meCard = `<div class="rank-row me" role="button" tabindex="0" data-trainer="me" aria-label="View your profile"><span class="pos">You</span><span class="who">${iconOf(save.avatar || 25, false)}<b>${esc(trainerName())}</b>${ownerBadge(currentUser?.uid)}</span><span class="val">${RANK_TABS[ui.rankTab][2](mine)}</span></div>`;
   if (ui.firebaseDown) { body.innerHTML = meCard + '<div class="empty"><b>Leaderboards unavailable</b><p>Firebase could not be reached. Check your connection and reload.</p></div>'; return; }
   if (!currentUser) { body.innerHTML = meCard + `<div class="empty"><b>Sign in to compete</b><p>Leaderboards use your trainer name and scores only. Sign in with Google on the Trainer Card to publish your score.</p><button class="btn primary" data-go="profile">Go to Trainer Card</button></div>`; return; }
   const unrankedNote = ranked() ? '' : `<div class="integrity">${ic('warn')}<div><b>Your save is unranked</b>, so your score isn't published. See the Trainer Card for details.</div></div>`;
@@ -517,7 +525,7 @@ async function renderRanks() {
     body.innerHTML = meCard + unrankedNote + rows.map((r, i) => {
       const v = ui.rankTab === 'today' ? r.daily?.[G.todayKey()] || 0 : r[field] || 0;
       const sc = (r.showcase || []).map(s => iconOf(s.num, s.shiny)).join('');
-      return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}" role="button" tabindex="0" data-trainer="${i}" aria-label="View ${esc(r.name || 'Trainer')}'s profile"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b><span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
+      return `<div class="rank-row ${r.id === currentUser.uid ? 'me' : ''}" role="button" tabindex="0" data-trainer="${i}" aria-label="View ${esc(r.name || 'Trainer')}'s profile"><span class="pos">${i + 1}</span><span class="who">${iconOf(Number(r.avatar) || 25, false)}<b>${esc(r.name || 'Trainer')}</b>${ownerBadge(r.id)}<span class="showcase">${sc}</span></span><span class="val">${RANK_TABS[ui.rankTab][2](v)}</span></div>`;
     }).join('');
   } catch (err) {
     console.error('Leaderboard load failed', err);
@@ -1264,7 +1272,7 @@ function renderProfile() {
   const score = G.trainerScore(save);
   const show = save.showcase.map(byUid).filter(Boolean);
   const integ = save.integrity || { status: 'ok' };
-  $('#trainerCard').innerHTML = `<div class="tc-head"><button class="tc-avatar-btn" id="pickAvatar" aria-label="Change profile picture" title="Change profile picture">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<span>Change</span></button><div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2>
+  $('#trainerCard').innerHTML = `<div class="tc-head"><button class="tc-avatar-btn" id="pickAvatar" aria-label="Change profile picture" title="Change profile picture">${pic(img.art(save.avatar || 25, false), [img.icon(save.avatar || 25, false)], 'class="tc-avatar" alt=""')}<span>Change</span></button><div><div class="eyebrow">${rankName(score)}</div><h2>${esc(trainerName())}</h2>${ownerBadge(currentUser?.uid)}
     <div class="tc-verify ${ranked() ? 'ok' : 'bad'}">${ic(ranked() ? 'shield' : 'warn')}${ranked() ? 'Verified save · ranked' : 'Unranked save'}</div>
     <div class="row-btns" style="margin-top:8px"><button class="btn small ghost" id="renameTrainer">Edit name</button><button class="btn small ghost" id="pickAvatar2">Change picture</button></div></div></div>
     ${ranked() ? '' : `<div class="integrity" style="margin-top:14px">${ic('warn')}<div><b>This save failed integrity checks, so it won't appear on leaderboards.</b> You can keep playing normally.<ul>${(integ.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul></div></div>`}
@@ -1379,7 +1387,7 @@ function showTrainer(r) {
     ? `<button class="btn ghost small" id="tpFriend" data-mode="remove">${ic('close')}Remove friend</button>`
     : `<button class="btn primary small" id="tpFriend" data-mode="add">${ic('plus')}Add friend</button>`;
   showModal(`<div class="tp-head">${pic(img.art(Number(r.avatar) || 25, false), [img.icon(Number(r.avatar) || 25, false)], 'class="tc-avatar" alt=""')}
-      <div><div class="eyebrow">${esc(rankName(r.score || 0))}${self ? ' · You' : isFriend(r.id) ? ' · Friend' : ''}</div><h2 id="modalTitle">${esc(r.name || 'Trainer')}</h2>
+      <div><div class="eyebrow">${esc(rankName(r.score || 0))}${self ? ' · You' : isFriend(r.id) ? ' · Friend' : ''}</div><h2 id="modalTitle">${esc(r.name || 'Trainer')}</h2>${ownerBadge(r.id === 'me' ? currentUser?.uid : r.id)}
       ${self || r.id === 'me' ? '' : `<small class="muted">Friend code ${esc(friendCode(r.id))}</small>`}<div class="row-btns" style="margin-top:8px">${friendBtn}</div></div></div>
     ${r.missing ? '<div class="empty"><b>Profile not found</b><p>This trainer hasn\'t published a profile yet, or their save is unranked.</p></div>' : `
     <div class="tc-stats tp-stats"><div><small>Trainer score</small><b>${fmt(r.score || 0)}</b></div><div><small>Wins</small><b>${fmt(r.wins || 0)}</b></div><div><small>Pokédex</small><b>${r.dex || 0}</b></div><div><small>Shiny species</small><b>${r.shinies || 0}</b></div><div><small>Best streak</small><b>${r.streak || 0} days</b></div><div><small>Today</small><b>${fmt(today)} pts</b></div></div>
