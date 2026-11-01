@@ -56,7 +56,7 @@
 <main id="app">
   <!-- First-join starter stage -->
   <section id="screen-starter" class="screen screen-starter" data-screen="starter">
-    <div class="st-head"><img src="assets/logo.svg" alt=""><div class="st-title"><div class="eyebrow">First-time setup</div><h1>Choose your partner</h1><p>Every partner rolls its own nature, IVs, ability and Tera Type. A rare few are shiny.</p></div></div>
+    <div class="st-head"><img src="assets/logo.svg" alt=""><div class="st-title"><div class="eyebrow">First-time setup</div><h1>Choose your partner</h1><p>Every partner rolls its own nature, IVs, ability and Tera Type. A rare few are shiny.</p></div><button class="btn ghost st-login" id="starterLogin" type="button">Have an account? Log in</button></div>
     <div class="gen-bar">
       <button class="icon-btn" id="genPrev" aria-label="Previous generation"><svg class="ic"><use href="assets/icons.svg#i-chev-l"/></svg></button>
       <div class="gen-tabs" id="generationBar" role="tablist" aria-label="Generations"></div>
@@ -124,10 +124,25 @@
     <div class="profile-layout">
       <div class="profile-main"><div class="trainer-card" id="trainerCard"></div><section class="card friends-card" id="friendsCard" aria-label="Friends"></section></div>
       <div class="profile-side">
-        <section class="card"><div class="section-title"><h2>Account</h2></div>
-          <p class="muted" id="authStatus" aria-live="polite">Not signed in. Progress stays on this device.</p>
-          <p style="margin-top:6px"><b id="profileName">Guest</b></p>
-          <div class="row-btns"><button id="googleSignIn" class="btn primary" type="button">Continue with Google</button><button id="googleSignOut" class="btn ghost" type="button" hidden>Sign out</button></div>
+        <section class="card account-card" id="accountCard"><div class="section-title"><h2>Account</h2></div>
+          <p class="muted" id="authStatus" aria-live="polite">Not logged in. You are playing as a guest on this device.</p>
+          <div id="authSignedIn" class="auth-signed-in" hidden>
+            <p><b id="profileName">Guest</b><small id="profileEmail"></small></p>
+            <div class="row-btns"><button id="googleSignOut" class="btn ghost" type="button">Log out</button></div>
+          </div>
+          <div id="authForms">
+            <div class="auth-tabs" role="tablist" aria-label="Account"><button type="button" role="tab" data-auth-mode="login" class="on" aria-selected="true">Log in</button><button type="button" role="tab" data-auth-mode="signup" aria-selected="false">Sign up</button></div>
+            <p class="muted auth-hint" id="authHint">Log in to load your saved progress on any device.</p>
+            <form id="authForm" class="auth-form" novalidate>
+              <label class="auth-field"><span>Email</span><input type="email" id="authEmail" autocomplete="email" required maxlength="254" placeholder="you@example.com"></label>
+              <label class="auth-field" id="authPasswordRow"><span>Password</span><input type="password" id="authPassword" autocomplete="current-password" required minlength="6" maxlength="128"></label>
+              <label class="auth-field" id="authConfirmRow" hidden><span>Confirm password</span><input type="password" id="authConfirm" autocomplete="new-password" minlength="6" maxlength="128"></label>
+              <p class="auth-msg" id="authMsg" role="alert"></p>
+              <div class="row-btns auth-actions"><button type="button" class="link-btn" id="authForgot">Forgot password?</button><button type="button" class="link-btn" id="authBackToLogin" hidden>Back to log in</button><button type="submit" id="authSubmit" class="btn primary">Log in</button></div>
+            </form>
+            <div class="auth-or" id="authOr"><span>or</span></div>
+            <button id="googleSignIn" class="btn ghost auth-google" type="button">Continue with Google</button>
+          </div>
         </section>
         <section class="card"><div class="section-title"><h2>Protected save transfer</h2></div>
           <p class="muted">Exports are encrypted with a password you choose and sealed against editing. You need the same password to import.</p>

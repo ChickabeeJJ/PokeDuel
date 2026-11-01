@@ -33,7 +33,8 @@ Serve the folder with any static server, for example `npx serve .` or `python3 -
 - **Save protection (anti-cheat)**: see the section below.
 - **Saves**:
   - **Local saves** live under `pokeduel-save-v2`. The old v1 save is migrated automatically and left untouched as a backup.
-  - **Google sign-in** gives per-account cloud saves in Firestore, which win on a last-modified basis.
+  - **Accounts**: Log in / Sign up with email and password or Google (Profile → Account, or "Have an account? Log in" on the starter screen). Signing up with an email that already has an account sends you to Log in. Each account has its own cloud save in Firestore; a newer local copy of the same save wins on a last-modified basis.
+  - **One save per account**: every save has a `saveId`, and `saveClaims/{saveId}` in Firestore links it to exactly one account, so the same data can't belong to two emails. Several accounts can share one browser: each account's save is kept in its own local slot, logging out returns to the guest save, and guest progress moves to the first account that signs up (or logs in to an account with no save yet).
   - **Export and import** works from the Trainer Card, as a file or a copyable code. Exports are **password-encrypted**. Imports are decrypted, verified and audited, and the previous save is backed up.
 
 ## Save protection

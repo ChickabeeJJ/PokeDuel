@@ -146,29 +146,109 @@ function getLocalSaveModifiedAt() {
 }
 function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800); }
 
-// ---------- Firebase auth + cloud save (unchanged strategy: last-modified wins) ----------
-function setAuthStatus(message) { authStatusMessage = message; const s = $('#authStatus'); if (s) s.textContent = currentUser ? authStatusMessage : 'Not signed in. Progress stays on this device.'; }
+// ---------- Accounts: log in / sign up, and one save per account ----------
+// Each device remembers which account owns the save it is playing (OWNER_KEY:
+// a uid, or 'guest'). Other accounts' saves wait in their own slot, so two
+// people sharing a browser keep separate progress. A save is only ever uploaded
+// to the account that owns it, and the saveClaims collection in Firestore ties
+// each saveId to exactly one account, so one save can't be shared by two emails.
+const OWNER_KEY = 'pokeduel-save-owner';
+const SLOT_PREFIX = 'pokeduel-slot-';
+const GUEST = 'guest';
+function localOwner() { try { return localStorage.getItem(OWNER_KEY); } catch (e) { return null; } }
+function setLocalOwner(owner) { try { localStorage.setItem(OWNER_KEY, owner); } catch (e) {} }
+// Verifies the seal on stored raw data, then migrates it (same rules as readSave).
+function parseStoredSave(raw) {
+  const s = G.migrateSave(raw);
+  if (!s) return null;
+  if (raw.seal && !S.verifySeal(raw)) flag(s, 'Save data was edited outside the game.');
+  runAudit(s);
+  return s;
+}
+function readSlot(owner) {
+  try {
+    const v = JSON.parse(localStorage.getItem(SLOT_PREFIX + owner) || 'null');
+    const s = v && parseStoredSave(v.save);
+    return s ? { save: s, at: Number(v.at) || 0 } : null;
+  } catch (e) { console.warn('Could not read saved slot', e); return null; }
+}
+function writeSlot(owner, s, at) {
+  try { localStorage.setItem(SLOT_PREFIX + owner, JSON.stringify({ save: S.applySeal(JSON.parse(JSON.stringify(s))), at })); return true; }
+  catch (e) { console.warn('Could not keep a save slot', e); toast('Could not keep the other save on this device (storage full).'); return false; }
+}
+function removeSlot(owner) { try { localStorage.removeItem(SLOT_PREFIX + owner); } catch (e) {} }
+// Puts the save that is being played aside under its owner (unless it is empty).
+function stashActiveSave() {
+  if (!save?.starterChosen) return;
+  writeSlot(localOwner() || GUEST, save, getLocalSaveModifiedAt());
+}
+// Makes `s` the save being played, owned by `owner`.
+function activateSave(s, owner, at) {
+  clearTimeout(cloudSaveTimer); cloudSaveTimer = null;
+  battleState = null;
+  applyingRemoteSave = true;
+  save = s; persist();
+  try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(at || Date.now())); } catch (e) {}
+  applyingRemoteSave = false;
+  setLocalOwner(owner); removeSlot(owner);
+  afterSaveReplaced();
+}
+
+function setAuthStatus(message) { authStatusMessage = message; const s = $('#authStatus'); if (s) s.textContent = currentUser ? authStatusMessage : (ui.firebaseDown ? authStatusMessage : 'Not logged in. You are playing as a guest on this device.'); }
 function renderAuthState() {
-  const a = $('#googleSignIn'), b = $('#googleSignOut');
-  if (a) a.hidden = !!currentUser;
-  if (b) b.hidden = !currentUser;
-  const n = $('#profileName'); if (n) n.textContent = currentUser ? (currentUser.displayName || 'Signed in') : 'Guest (this device only)';
+  const signedIn = !!currentUser;
+  const form = $('#authForms'), out = $('#authSignedIn');
+  if (form) form.hidden = signedIn;
+  if (out) out.hidden = !signedIn;
+  const n = $('#profileName'); if (n) n.textContent = signedIn ? (currentUser.displayName || currentUser.email || 'Signed in') : 'Guest';
+  const e = $('#profileEmail'); if (e) e.textContent = signedIn && currentUser.displayName && currentUser.email ? currentUser.email : '';
   setAuthStatus(authStatusMessage);
+  setAuthMode(ui.authMode || 'login');
 }
 function authErrorMessage(error) {
   const code = error?.code || '';
   if (code === 'auth/unauthorized-domain') return 'This domain is not authorised. Add it under Firebase Authentication → Settings → Authorised domains.';
-  if (code === 'auth/operation-not-allowed') return 'Google sign-in is not enabled yet. Enable Google in Firebase Authentication → Sign-in method.';
+  if (code === 'auth/operation-not-allowed') return 'This sign-in method is not enabled yet. Enable Email/Password and Google in Firebase Authentication → Sign-in method.';
   if (code === 'auth/popup-blocked') return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.';
-  if (code === 'auth/popup-closed-by-user') return 'Google sign-in was cancelled.';
-  if (code === 'auth/network-request-failed') return 'Network error during sign-in. Check your connection and try again.';
-  if (code === 'permission-denied' || code === 'firestore/permission-denied') return 'Firestore denied the request. Publish the rules in firestore.rules (users/{uid} and leaderboard/{uid}).';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return 'Google sign-in was cancelled.';
+  if (code === 'auth/network-request-failed') return 'Network error. Check your connection and try again.';
+  if (code === 'auth/invalid-email') return 'That email address doesn’t look right.';
+  if (code === 'auth/missing-password') return 'Enter your password.';
+  if (code === 'auth/weak-password') return 'Choose a password with at least 6 characters.';
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') return 'Email or password is incorrect. If you signed up with Google, use “Continue with Google”. No account yet? Choose Sign up.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Wait a few minutes, or reset your password.';
+  if (code === 'auth/user-disabled') return 'This account has been disabled.';
+  if (code === 'permission-denied' || code === 'firestore/permission-denied') return 'Firestore denied the request. Publish the rules in firestore.rules (users, saveClaims and leaderboard).';
   return error?.message || 'Something went wrong. Check the browser console for details.';
+}
+const isPermissionError = err => /permission-denied/.test(err?.code || '');
+// Ties a saveId to one account. 'ok' = this account owns it, 'taken' = another
+// account does, 'unchecked' = the saveClaims rules aren't published yet (the
+// device-side checks still apply).
+async function claimSave(uid, saveId) {
+  const ref = fb.doc(db, 'saveClaims', saveId);
+  try {
+    const snap = await fb.getDoc(ref);
+    if (snap.exists()) return snap.data().uid === uid ? 'ok' : 'taken';
+    await fb.setDoc(ref, { uid, claimedAt: fb.serverTimestamp() });
+    return 'ok';
+  } catch (err) {
+    if (isPermissionError(err)) { console.warn('saveClaims is not readable/writable; publish firestore.rules to enforce one account per save.', err); return 'unchecked'; }
+    throw err;
+  }
 }
 function writeCloudSave(user, snapshotSave) {
   const snapshot = JSON.parse(JSON.stringify(snapshotSave));
   const op = async () => {
-    await fb.setDoc(fb.doc(db, 'users', user.uid), { schemaVersion: 2, saveData: snapshot, displayName: user.displayName || null, email: user.email || null, photoURL: user.photoURL || null, updatedAt: fb.serverTimestamp() }, { merge: true });
+    // Never upload a save that this account doesn't own on this device.
+    if (localOwner() !== user.uid) return;
+    // A new saveId (fresh start, reset, import) is claimed before its first upload.
+    const key = user.uid + ':' + snapshot.saveId;
+    if (ui.claimedKey !== key) {
+      if (await claimSave(user.uid, snapshot.saveId) === 'taken') throw new Error('This save is registered to another account, so it was not uploaded.');
+      ui.claimedKey = key;
+    }
+    await fb.setDoc(fb.doc(db, 'users', user.uid), { schemaVersion: 3, saveId: snapshot.saveId, saveData: snapshot, displayName: user.displayName || null, email: user.email || null, photoURL: user.photoURL || null, updatedAt: fb.serverTimestamp() }, { merge: true });
     try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now())); } catch (e) {}
   };
   cloudWriteQueue = cloudWriteQueue.then(op, op);
@@ -178,65 +258,211 @@ function scheduleCloudSave() {
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(() => {
     cloudSaveTimer = null;
-    if (!currentUser || !authReady || applyingRemoteSave) return;
+    if (!currentUser || !authReady || applyingRemoteSave || ui.syncing || localOwner() !== currentUser.uid) return;
     const user = currentUser;
-    writeCloudSave(user, save).then(() => { if (currentUser?.uid === user.uid) setAuthStatus('Signed in · cloud save synced.'); })
-      .catch(err => { console.error('PokeDuel cloud save failed:', err); if (currentUser?.uid === user.uid) setAuthStatus('Signed in, but cloud save failed: ' + authErrorMessage(err)); });
+    writeCloudSave(user, save).then(() => { if (currentUser?.uid === user.uid) setAuthStatus('Logged in · cloud save synced.'); })
+      .catch(err => { console.error('PokeDuel cloud save failed:', err); if (currentUser?.uid === user.uid) setAuthStatus('Logged in, but cloud save failed: ' + authErrorMessage(err)); });
   }, 650);
 }
+// Claims `s` for this account; a save already owned by someone else is re-keyed
+// (forked) unless `refuseIfTaken`, in which case null is returned.
+async function claimOrFork(uid, s, refuseIfTaken) {
+  const r = await claimSave(uid, s.saveId);
+  if (r !== 'taken') return s;
+  if (refuseIfTaken) return null;
+  s.saveId = G.newSaveId();
+  return (await claimSave(uid, s.saveId)) === 'taken' ? null : s;
+}
+// Picks this account's save after log-in:
+// 1. the cloud save, or this account's local copy if that is newer (same saveId);
+// 2. otherwise the guest progress on this device, if it isn't owned elsewhere;
+// 3. otherwise a fresh start (starter selection).
+// Whatever was being played before is kept aside under its own owner.
 async function syncSignedInUser(user) {
-  setAuthStatus('Signed in · checking your cloud save…');
+  const uid = user.uid;
+  ui.syncing = true;
+  setAuthStatus('Logged in · loading your save…');
   try {
-    const snap = await fb.getDoc(fb.doc(db, 'users', user.uid));
-    if (!snap.exists()) { await writeCloudSave(user, save); setAuthStatus('Signed in · this device’s progress was backed up to your account.'); toast('Progress backed up to your account.'); scheduleLeaderboard(); return; }
-    const data = snap.data();
-    const remote = G.migrateSave(data.saveData);
-    if (!remote) throw new Error('The cloud save format is missing or unsupported. Your local save has not been deleted.');
-    if (data.saveData?.seal && !S.verifySeal(data.saveData)) flag(remote, 'Cloud save was edited outside the game.');
-    runAudit(remote);
-    const cloudAt = Number(data.updatedAt?.toMillis?.() || Date.parse(remote.lastActive || '') || 0);
-    if (getLocalSaveModifiedAt() > cloudAt) { await writeCloudSave(user, save); setAuthStatus('Signed in · your newer local progress was synced to the cloud.'); toast('Your local progress was synced to your account.'); scheduleLeaderboard(); return; }
-    applyingRemoteSave = true;
-    save = remote; persist();
-    try { localStorage.setItem(LOCAL_MODIFIED_KEY, String(cloudAt || Date.now())); } catch (e) {}
-    applyingRemoteSave = false;
-    afterSaveReplaced();
-    setAuthStatus('Signed in · cloud save synced.'); toast('Your account save has been loaded.');
+    const snap = await fb.getDoc(fb.doc(db, 'users', uid));
+    if (currentUser?.uid !== uid) return;
+    let remote = null, cloudAt = 0;
+    if (snap.exists()) {
+      const data = snap.data();
+      remote = G.migrateSave(data.saveData);
+      if (!remote) throw new Error('The cloud save format is missing or unsupported. Nothing on this device was deleted.');
+      if (data.saveData?.seal && !S.verifySeal(data.saveData)) flag(remote, 'Cloud save was edited outside the game.');
+      runAudit(remote);
+      cloudAt = Number(data.updatedAt?.toMillis?.() || Date.parse(remote.lastActive || '') || 0);
+    }
+    const owner = localOwner();
+    const activeIsMine = owner === uid || ((owner === null || owner === GUEST) && remote && save.saveId === remote.saveId);
+    let local = activeIsMine ? { save, at: getLocalSaveModifiedAt() } : readSlot(uid);
+    if (local && remote && local.save.saveId !== remote.saveId) local = null; // stale copy of another save
+    const guestCanJoin = !remote && !local && (owner === GUEST || owner === null) && save.starterChosen;
+
+    let chosen, at, upload, note;
+    if (remote && local && local.at > cloudAt) { chosen = local.save; at = local.at; upload = true; note = 'Your newer progress on this device was synced to your account.'; }
+    else if (remote) { chosen = remote; at = cloudAt; upload = false; note = 'Your account save has been loaded.'; }
+    else if (local) { chosen = local.save; at = local.at; upload = true; note = 'Your progress was backed up to your account.'; }
+    else if (guestCanJoin) {
+      chosen = await claimOrFork(uid, save, true);
+      at = getLocalSaveModifiedAt(); upload = true;
+      note = chosen ? 'Your guest progress is now saved to this account.' : null;
+      if (!chosen) { toast('This guest progress already belongs to another account, so it stays on this device as a guest save.'); }
+    }
+    if (currentUser?.uid !== uid) return;
+    if (!chosen) { chosen = G.defaultSave(); at = Date.now(); upload = false; note = 'Welcome! Pick your partner to start this account’s adventure.'; }
+    else if (!(guestCanJoin && upload)) {
+      // Register the save for this account (older saves were never claimed).
+      const claimed = await claimOrFork(uid, chosen, false);
+      if (!claimed) throw new Error('This save is registered to another account.');
+      if (remote && claimed === remote && remote.saveId !== snap.data().saveData?.saveId) upload = true; // re-keyed: store the new id
+    }
+    if (currentUser?.uid !== uid) return;
+    if (chosen !== save) { if (owner !== uid) stashActiveSave(); activateSave(chosen, uid, at); }
+    else setLocalOwner(uid);
+    ui.syncing = false;
+    if (upload && save.starterChosen) await writeCloudSave(user, save);
+    setAuthStatus('Logged in · cloud save synced.');
+    if (note) toast(note);
     scheduleLeaderboard();
   } catch (err) {
-    applyingRemoteSave = false;
     console.error('PokeDuel cloud sync failed:', err);
-    setAuthStatus('Signed in, but cloud sync is unavailable: ' + authErrorMessage(err)); toast('Signed in, but cloud saving needs setup.');
-  }
+    setAuthStatus('Logged in, but cloud sync is unavailable: ' + authErrorMessage(err));
+    toast('Logged in, but your cloud save could not be loaded.');
+  } finally { ui.syncing = false; }
+}
+// Signed out (or the session ended): keep the account's save aside and go back
+// to this device's guest save, so the next person doesn't play on your account.
+function switchToGuest() {
+  const owner = localOwner();
+  if (owner === null) { setLocalOwner(GUEST); return; }
+  if (owner === GUEST) return;
+  writeSlot(owner, save, getLocalSaveModifiedAt());
+  const guest = readSlot(GUEST);
+  activateSave(guest ? guest.save : G.defaultSave(), GUEST, guest ? guest.at : Date.now());
+}
+
+// ---------- Log in / Sign up form ----------
+function setAuthMode(mode) {
+  ui.authMode = mode;
+  const signup = mode === 'signup', reset = mode === 'reset';
+  $$('[data-auth-mode]').forEach(b => { const on = b.dataset.authMode === mode || (reset && b.dataset.authMode === 'login'); b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  const f = $('#authForm'); if (!f) return;
+  $('#authConfirmRow').hidden = !signup;
+  $('#authPasswordRow').hidden = reset;
+  $('#authConfirm').required = signup;
+  $('#authPassword').required = !reset;
+  $('#authPassword').autocomplete = signup ? 'new-password' : 'current-password';
+  $('#authSubmit').textContent = signup ? 'Create account' : reset ? 'Send reset link' : 'Log in';
+  $('#authForgot').hidden = signup || reset;
+  $('#authBackToLogin').hidden = !reset;
+  $('#googleSignIn').hidden = reset;
+  $('#authOr').hidden = reset;
+  $('#authHint').textContent = signup ? 'New here? Create an account to keep your progress in the cloud. Any guest progress on this device moves to the new account.'
+    : reset ? 'Enter your account email and we’ll send a link to choose a new password.' : 'Log in to load your saved progress on any device.';
+}
+// The same forms open in a dialog from the starter screen, so a new device (or
+// a guest after logging out) can log in before picking a partner.
+function openAccountModal(mode = 'login') {
+  const forms = $('#authForms');
+  showModal('<h2 id="modalTitle">Account</h2><div id="authModalSlot"></div>', { onClose: () => $('#accountCard').appendChild(forms) });
+  $('#authModalSlot').appendChild(forms);
+  setAuthMode(mode); authMsg('');
+  if (ui.firebaseDown) authMsg('Accounts are unavailable right now (could not reach Firebase).', 'bad');
+  setTimeout(() => $('#authEmail').focus(), 40);
+}
+function authMsg(text, kind = '') { const m = $('#authMsg'); if (!m) return; m.textContent = text; m.className = 'auth-msg ' + kind; }
+function wireAuthForms() {
+  $$('[data-auth-mode]').forEach(b => b.addEventListener('click', () => { setAuthMode(b.dataset.authMode); authMsg(''); }));
+  $('#authForgot').addEventListener('click', () => { setAuthMode('reset'); authMsg(''); $('#authEmail').focus(); });
+  $('#authBackToLogin').addEventListener('click', () => { setAuthMode('login'); authMsg(''); });
+  $('#authForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!auth) { authMsg('Accounts are unavailable right now (could not reach Firebase).', 'bad'); return; }
+    const mode = ui.authMode || 'login';
+    const email = $('#authEmail').value.trim(), pw = $('#authPassword').value;
+    const btn = $('#authSubmit'); btn.disabled = true;
+    try {
+      if (mode === 'reset') {
+        await fb.sendPasswordResetEmail(auth, email);
+        authMsg('If an account exists for ' + email + ', a reset link is on its way. Check your inbox.', 'good');
+        setAuthMode('login');
+      } else if (mode === 'signup') {
+        if (pw !== $('#authConfirm').value) { authMsg('The passwords don’t match.', 'bad'); return; }
+        try {
+          const cred = await fb.createUserWithEmailAndPassword(auth, email, pw);
+          fb.sendEmailVerification(cred.user).catch(() => {});
+          authMsg(''); toast('Account created. Welcome to PokeDuel!');
+        } catch (err) {
+          if (err?.code !== 'auth/email-already-in-use') throw err;
+          // Existing email: send them to log in instead of creating a second account.
+          setAuthMode('login');
+          $('#authPassword').value = ''; $('#authConfirm').value = '';
+          authMsg('An account with this email already exists. Log in instead (or use “Continue with Google” if you signed up with Google).', 'warn');
+          $('#authPassword').focus();
+        }
+      } else {
+        await fb.signInWithEmailAndPassword(auth, email, pw);
+        authMsg('');
+      }
+    } catch (err) { console.error('Auth failed:', err); authMsg(authErrorMessage(err), 'bad'); }
+    finally { btn.disabled = false; }
+  });
+  $('#googleSignIn').addEventListener('click', async () => {
+    if (!auth) return;
+    const btn = $('#googleSignIn'); btn.disabled = true;
+    const mode = ui.authMode || 'login';
+    try {
+      const res = await fb.signInWithPopup(auth, googleProvider);
+      const isNew = fb.getAdditionalUserInfo(res)?.isNewUser;
+      authMsg('');
+      if (mode === 'signup' && !isNew) { setAuthMode('login'); toast('This Google account is already registered, so you were logged in to it.'); }
+      else if (isNew) toast('Account created with Google. Welcome to PokeDuel!');
+    } catch (err) {
+      console.error('Google sign-in failed:', err);
+      if (err?.code === 'auth/account-exists-with-different-credential') { setAuthMode('login'); authMsg('This email already has an account. Log in with your email and password.', 'warn'); }
+      else authMsg(authErrorMessage(err), 'bad');
+    } finally { btn.disabled = false; }
+  });
+  $('#googleSignOut').addEventListener('click', () => logOut($('#googleSignOut')));
+}
+async function logOut(btn) {
+    btn.disabled = true;
+    try {
+      clearTimeout(cloudSaveTimer); cloudSaveTimer = null;
+      if (currentUser && authReady && localOwner() === currentUser.uid) {
+        try { await writeCloudSave(currentUser, save); }
+        catch (err) { console.warn('Final cloud save failed; the save stays on this device for next time.', err); }
+      }
+      await fb.signOut(auth);
+      toast('Logged out. Your progress is saved for when you log in again.');
+    } catch (err) { console.error('Sign-out failed:', err); const m = authErrorMessage(err); setAuthStatus(m); toast(m); }
+    finally { btn.disabled = false; }
 }
 async function startFirebaseAuth() {
+  setAuthMode('login');
+  $('#starterLogin').addEventListener('click', e => { if (currentUser) logOut(e.currentTarget); else openAccountModal('login'); });
   try { await loadFirebase(); }
   catch (err) {
     console.warn('Firebase could not be loaded:', err);
-    authStatusMessage = 'Cloud features are unavailable right now (could not reach Firebase). Your progress is saved on this device.';
-    const st = $('#authStatus'); if (st) st.textContent = authStatusMessage;
-    const btn = $('#googleSignIn'); if (btn) { btn.disabled = true; btn.title = 'Firebase could not be loaded'; }
     ui.firebaseDown = true;
+    authStatusMessage = 'Accounts are unavailable right now (could not reach Firebase). Your progress is saved on this device.';
+    setAuthStatus(authStatusMessage);
+    $$('#authForm button, #authForm input, #googleSignIn').forEach(el => { el.disabled = true; });
     return;
   }
-  $('#googleSignIn').addEventListener('click', async () => {
-    const btn = $('#googleSignIn'); btn.disabled = true;
-    try { await fb.signInWithPopup(auth, googleProvider); }
-    catch (err) { console.error('Google sign-in failed:', err); const m = authErrorMessage(err); setAuthStatus(m); toast(m); }
-    finally { btn.disabled = false; }
-  });
-  $('#googleSignOut').addEventListener('click', async () => {
-    const btn = $('#googleSignOut'); btn.disabled = true;
-    try { clearTimeout(cloudSaveTimer); cloudSaveTimer = null; if (currentUser && authReady) await writeCloudSave(currentUser, save); await fb.signOut(auth); toast('Signed out. Your local save is still on this device.'); }
-    catch (err) { console.error('Sign-out failed:', err); const m = authErrorMessage(err); setAuthStatus(m); toast(m); }
-    finally { btn.disabled = false; }
-  });
+  wireAuthForms();
   fb.onAuthStateChanged(auth, async user => {
     if (currentUser?.uid !== user?.uid) { ui.friendData = null; ui.friendsState = null; }
     currentUser = user; authReady = true; renderAuthState();
+    if (user && $('#authModalSlot')?.contains($('#authForms'))) closeModal(true);
+    $('#starterLogin').textContent = user ? 'Log out of ' + (user.displayName || user.email || 'this account') : 'Have an account? Log in';
     if (activeScreen === 'profile') renderFriends();
-    if (user) await syncSignedInUser(user); else setAuthStatus('Not signed in. Progress stays on this device.');
+    if (user) await syncSignedInUser(user);
+    else { switchToGuest(); setAuthStatus(''); }
     if (activeScreen === 'leaderboard') renderRanks();
+    if (activeScreen === 'profile') renderProfile();
   });
 }
 
@@ -265,7 +491,7 @@ function localProfile() {
 function scheduleLeaderboard() {
   clearTimeout(lbTimer);
   lbTimer = setTimeout(async () => {
-    if (!currentUser || !save.starterChosen) return;
+    if (!currentUser || !save.starterChosen || ui.syncing || localOwner() !== currentUser.uid) return;
     if (!ranked()) { try { await fb.deleteDoc(fb.doc(db, 'leaderboard', currentUser.uid)); } catch (e) {} return; }
     try { await fb.setDoc(fb.doc(db, 'leaderboard', currentUser.uid), leaderboardDoc()); }
     catch (err) { console.warn('Leaderboard publish failed (will retry):', err); ui.lbError = authErrorMessage(err); clearTimeout(lbTimer); lbTimer = setTimeout(scheduleLeaderboard, 60000); }
@@ -359,7 +585,7 @@ function go(name, opts = {}) {
   $$('.screen').forEach(s => s.classList.toggle('active', s.dataset.screen === name));
   $$('.hud-link').forEach(b => b.classList.toggle('active', b.dataset.go === name));
   revealActiveTab();
-  if (!opts.noHash && location.hash !== '#/' + name) history.pushState(null, '', '#/' + name);
+  if (location.hash !== '#/' + name) history[opts.noHash ? 'replaceState' : 'pushState'](null, '', '#/' + name);
   window.scrollTo({ top: 0, behavior: 'auto' });
   ({ starter: renderStarter, home: renderHome, boxes: renderBoxes, shop: renderShop, bag: renderBag, dex: renderDex, leaderboard: renderRanks, profile: renderProfile, medals: renderMedals, journey: renderJourney }[name] || (() => {}))();
 }
@@ -397,6 +623,7 @@ function updateHud() {
 // ---------- Modal ----------
 let modalOnClose = null;
 function showModal(html, { wide = false, onClose = null, locked = false } = {}) {
+  const forms = $('#authForms'); if (forms && $('#modalContent').contains(forms)) $('#accountCard').appendChild(forms);
   $('#modalContent').innerHTML = html;
   $('#modal .modal').classList.toggle('wide', wide);
   $('#modal').classList.remove('hidden');
@@ -1214,7 +1441,7 @@ async function loadFriends(force) {
 function renderFriends(skipLoad) {
   const el = $('#friendsCard'); if (!el) return;
   const head = `<div class="section-title"><h2>Friends</h2><span class="muted">${save.friends.length} / 100</span></div>`;
-  if (!currentUser) { el.innerHTML = head + `<div class="empty"><b>Sign in to add friends</b><p>Friends use your Google sign-in, so you can follow each other's scores and showcases. Sign in under Account.</p></div>`; return; }
+  if (!currentUser) { el.innerHTML = head + `<div class="empty"><b>Log in to add friends</b><p>Friends are linked to your account, so you can follow each other's scores and showcases. Log in or sign up under Account.</p></div>`; return; }
   const code = friendCode(currentUser.uid);
   const add = `<div class="friend-tools"><div class="friend-code"><small>Your friend code</small><b>${esc(code)}</b><button class="btn ghost small" id="copyFriendCode">${ic('copy')}Copy</button></div>
     <form class="friend-add" id="friendAdd"><input id="friendCodeInput" placeholder="Enter a friend code" maxlength="28" autocomplete="off" spellcheck="false" aria-label="Friend code"><button class="btn primary small" type="submit">${ic('plus')}Add</button></form>
@@ -1321,6 +1548,13 @@ async function previewImport(text) {
   catch (e) { showModal(`<h2 id="modalTitle">Import refused</h2><p style="white-space:pre-line">${esc(e.message)}</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
   if (!res) return;
   const s = res.save;
+  // Logged in: the imported save becomes this account's, so it must not belong to another account.
+  if (currentUser && fb && s.saveId !== save.saveId) {
+    let r;
+    try { r = await claimSave(currentUser.uid, s.saveId); }
+    catch (e) { showModal(`<h2 id="modalTitle">Import failed</h2><p>${esc(authErrorMessage(e))}</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
+    if (r === 'taken') { showModal(`<h2 id="modalTitle">Import refused</h2><p>This save belongs to another account. A save can only be linked to one account. Log in to that account to use it.</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`); return; }
+  }
   confirmBox('Import this save?', `<b>${esc(s.trainerName || 'Trainer')}</b> · ${s.box.length} Pokémon · ${s.ownedDex.length} species · ${fmt(s.coins)} coins · last played ${s.lastActive ? new Date(s.lastActive).toLocaleString() : 'unknown'}.<br><br>${res.unprotected ? '<b>This file is unprotected, so the save will be unranked (no leaderboards).</b><br><br>' : ''}This replaces the save in this browser${currentUser ? ' and your cloud save' : ''}. A backup of your current save is kept in this browser.`, 'Import save', () => {
     try { localStorage.setItem(BACKUP_KEY, JSON.stringify(save)); } catch (e) {}
     save = s; afterProgress(); afterSaveReplaced(); toast('Save imported!');

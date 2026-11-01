@@ -207,3 +207,16 @@ test('friends list survives migration and is sanitised', () => {
   assert.equal(s.friends[0].name.length, 16);
   assert.equal(s.friends[0].avatar, 1025);
 });
+
+test('every save has a stable id that survives migration and reloads', () => {
+  const a = G.defaultSave(), b = G.defaultSave();
+  assert.match(a.saveId, /^sv[0-9a-f]{30}$/);
+  assert.notEqual(a.saveId, b.saveId);
+  assert.equal(G.migrateSave(JSON.parse(JSON.stringify(a))).saveId, a.saveId);
+  // Older saves get an id from their creation time, so every copy agrees on it.
+  const old = { version: 2, createdAt: '2026-10-29T08:15:30.123Z', box: [] };
+  assert.equal(G.migrateSave(old).saveId, 'lg20261029081530123');
+  assert.equal(G.migrateSave({ ...old }).saveId, G.migrateSave({ ...old }).saveId);
+  // Junk ids are replaced, never trusted.
+  assert.equal(G.migrateSave({ ...old, saveId: '../users/x' }).saveId, 'lg20261029081530123');
+});

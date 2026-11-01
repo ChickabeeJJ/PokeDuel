@@ -554,9 +554,23 @@ export function trainerScore(s) {
 
 // ---------- Save format ----------
 export const SAVE_VERSION = 2;
+// Every save has a permanent id. Cloud sync claims it for one account, so the
+// same save data can never belong to two sign-ins.
+const SAVE_ID_RE = /^[A-Za-z0-9]{8,64}$/;
+export function newSaveId() {
+  const a = new Uint8Array(15);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(a); else for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+  return 'sv' + Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+}
+// Saves made before ids existed get one derived from their creation time, so
+// every copy of the same save (other devices, the cloud) agrees on it.
+export function legacySaveId(createdAt) {
+  const digits = String(createdAt || '').replace(/\D/g, '');
+  return digits.length >= 8 ? 'lg' + digits.slice(0, 40) : newSaveId();
+}
 export function defaultSave() {
   return {
-    version: SAVE_VERSION, createdAt: new Date().toISOString(), trainerName: '', avatar: 25, coins: 300, starterChosen: false, starterId: null,
+    version: SAVE_VERSION, saveId: newSaveId(), createdAt: new Date().toISOString(), trainerName: '', avatar: 25, coins: 300, starterChosen: false, starterId: null,
     box: [], party: [], inventory: { potion: 3, superpotion: 1, expcandys: 1 }, keyItems: { expshare: true },
     dailyDate: todayKey(), daily: { easy: null, medium: null, hard: null }, outbreak: { date: '', opened: 0 },
     checkin: { last: '', streak: 0, best: 0 }, missions: { date: '', list: [], bonus: false },
@@ -625,6 +639,7 @@ export function migrateSave(raw) {
   }
   if (raw.version !== 1 && raw.version !== SAVE_VERSION && raw.migratedFrom !== 1) return null;
   const s = { ...base, ...raw, version: SAVE_VERSION };
+  s.saveId = typeof raw.saveId === 'string' && SAVE_ID_RE.test(raw.saveId) ? raw.saveId : legacySaveId(raw.createdAt);
   s.box = (Array.isArray(raw.box) ? raw.box : []).map(cleanInstance).filter(Boolean);
   const uids = new Set(s.box.map(p => p.uid));
   s.party = [...new Set((Array.isArray(raw.party) ? raw.party : []).map(String).filter(u => uids.has(u)))].slice(0, 6);
