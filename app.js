@@ -358,10 +358,29 @@ function go(name, opts = {}) {
   $('#siteFoot').hidden = !['home', 'dex', 'leaderboard', 'profile', 'medals', 'journey'].includes(name);
   $$('.screen').forEach(s => s.classList.toggle('active', s.dataset.screen === name));
   $$('.hud-link').forEach(b => b.classList.toggle('active', b.dataset.go === name));
+  revealActiveTab();
   if (!opts.noHash && location.hash !== '#/' + name) history.pushState(null, '', '#/' + name);
   window.scrollTo({ top: 0, behavior: 'auto' });
   ({ starter: renderStarter, home: renderHome, boxes: renderBoxes, shop: renderShop, bag: renderBag, dex: renderDex, leaderboard: renderRanks, profile: renderProfile, medals: renderMedals, journey: renderJourney }[name] || (() => {}))();
 }
+// On narrow screens the top tabs scroll sideways; keep the current one in view.
+function revealActiveTab() {
+  const nav = $('.hud-nav'), b = $('.hud-link.active');
+  if (!nav || !b || nav.scrollWidth <= nav.clientWidth) return;
+  nav.scrollTo({ left: b.offsetLeft - (nav.clientWidth - b.offsetWidth) / 2, behavior: 'auto' });
+}
+// Screens sized to the viewport subtract the header, whose height changes with
+// wrapping, so publish the measured height as --hud-h.
+function trackHudHeight() {
+  const hud = $('#hud');
+  const set = () => { if (!hud.hidden) document.documentElement.style.setProperty('--hud-h', hud.offsetHeight + 'px'); };
+  if ('ResizeObserver' in window) new ResizeObserver(set).observe(hud);
+  window.addEventListener('resize', () => { set(); revealActiveTab(); });
+  set();
+}
+// Large monitors zoom the page (see "Device scaling" in styles.css). Bounding
+// rects are in screen pixels, so divide by the zoom before writing CSS pixels.
+const pageZoom = () => parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
 function updateHud() {
   if (!save) return;
   const bump = (el, txt) => { if (el.textContent === txt) return; const first = el.textContent === '0' || !el.textContent; el.textContent = txt; if (!first && fxOn()) el.closest('.wal')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' }); };
@@ -1438,7 +1457,7 @@ function fitSprite(el, side) {
   el.style.marginBottom = el.style.left = '';
   if (hd || !el.naturalHeight) { el.style.width = el.style.height = ''; return; }
   const slot = el.parentElement.getBoundingClientRect();
-  const P = slot.width / (side === 'p' ? 0.6 : 0.72); // painted platform width
+  const P = slot.width / pageZoom() / (side === 'p' ? 0.6 : 0.72); // painted platform width
   const b = spriteBox(el);
   const ht = D()[G.gameData.numToId[+el.dataset.num]]?.ht ?? 1;
   const t = Math.max(0, Math.min(1, (Math.log2(Math.max(0.1, ht)) + 1.5) / 4));
@@ -1465,8 +1484,8 @@ const fxOn = () => save.settings.animations && !save.settings.reducedEffects && 
 const spriteEl = side => side === 'p' ? $('#playerSprite') : $('#enemySprite');
 const typeColor = t => `var(--t-${String(t || 'normal').toLowerCase()})`;
 function spriteCentre(side) {
-  const a = $('#battlefield').getBoundingClientRect(), r = spriteEl(side).getBoundingClientRect();
-  return { x: r.left - a.left + r.width / 2, y: r.top - a.top + r.height * 0.55, h: r.height };
+  const a = $('#battlefield').getBoundingClientRect(), r = spriteEl(side).getBoundingClientRect(), z = pageZoom();
+  return { x: (r.left - a.left + r.width / 2) / z, y: (r.top - a.top + r.height * 0.55) / z, h: r.height / z };
 }
 function fxNode(cls, x, y, color, extra = '') {
   const el = document.createElement('div');
@@ -1997,7 +2016,7 @@ async function boot() {
   initialLocalSaveTimestamp = Date.parse(save.lastActive || '') || 0;
   checkNewDay();
   if (save.settings.reducedEffects) document.body.classList.add('reduced-effects');
-  if (!boot.wired) { setupListeners(); boot.wired = true; }
+  if (!boot.wired) { setupListeners(); trackHudHeight(); boot.wired = true; }
   startParade();
   const start = location.hash.replace('#/', '');
   go(save.starterChosen ? (SCREENS.includes(start) && start !== 'battle' && start !== 'starter' ? start : 'home') : 'starter', { noHash: false });

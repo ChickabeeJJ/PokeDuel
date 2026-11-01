@@ -3,6 +3,7 @@
    textures for depth, condensed italic display type. Original CSS + the SVG
    icon set in assets/icons.svg. Background art is optional (assets/manifest.json). */
 :root{
+  --z:1; --vh:calc(1dvh / var(--z));
   --bg-0:#0f1013; --bg-1:#1d1f24; --bg-2:#2b2f36;
   --panel:linear-gradient(160deg,rgba(76,83,96,.96) 0%,rgba(41,45,53,.97) 52%,rgba(26,28,33,.98) 100%);
   --panel-2:linear-gradient(160deg,rgba(94,103,120,.9),rgba(55,60,69,.92));
@@ -23,7 +24,7 @@
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;background:var(--bg-0)}
-body{margin:0;min-height:100vh;min-height:100dvh;color:var(--text);font:500 16px/1.4 var(--font);overflow-x:hidden;background:
+body{margin:0;min-height:100vh;min-height:calc(100 * var(--vh));color:var(--text);font:500 16px/1.4 var(--font);overflow-x:hidden;background:
   radial-gradient(1100px 620px at 92% -8%,rgba(139,147,163,.20),transparent 62%),
   radial-gradient(900px 640px at -8% 108%,rgba(255,61,139,.20),transparent 62%),
   radial-gradient(700px 500px at 50% 50%,rgba(164,170,183,.16),transparent 70%),
@@ -144,7 +145,7 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:16px clamp(12px,2.4vw,32p
 @keyframes screenIn{from{opacity:0}to{opacity:1}}
 .site-foot{display:flex;flex-wrap:wrap;gap:4px 18px;justify-content:space-between;padding:6px clamp(12px,2.4vw,32px) 14px;color:var(--dim);font-size:.8rem}
 .site-foot a{color:var(--muted)}
-.fill{height:calc(100dvh - var(--hud-h) - 70px);min-height:560px}
+.fill{height:calc(100 * var(--vh) - var(--hud-h) - 70px);min-height:560px}
 
 /* ---------- Generic screen chrome ---------- */
 .tabbar{position:relative;display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:8px 40px 8px 8px;background:var(--bar,linear-gradient(90deg,#2e323b,#464c58));clip-path:polygon(0 0,100% 0,calc(100% - 26px) 100%,0 100%);box-shadow:var(--shadow)}
@@ -159,7 +160,7 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:16px clamp(12px,2.4vw,32p
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ---------- Starter stage ---------- */
-.screen-starter.active{position:relative;display:grid;grid-template-rows:auto auto 1fr auto;gap:14px;min-height:calc(100dvh - 34px);isolation:isolate}
+.screen-starter.active{position:relative;display:grid;grid-template-rows:auto auto 1fr auto;gap:14px;min-height:calc(100 * var(--vh) - 34px);isolation:isolate}
 .screen-starter::before{content:"";position:fixed;inset:0;z-index:-1;background:
   radial-gradient(60% 55% at 50% 52%,color-mix(in srgb,var(--tc,#9199a9) 55%,transparent),transparent 70%),
   linear-gradient(180deg,rgba(15,16,19,.2),rgba(15,16,19,.85));transition:background .5s}
@@ -182,7 +183,7 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:16px clamp(12px,2.4vw,32p
 .st-mon{position:relative;display:grid;justify-items:center;gap:6px;padding:0 0 10px;border:0;background:none;transition:transform .3s,filter .3s;filter:saturate(.75) brightness(.8)}
 .st-mon:hover{filter:none}
 .st-mon.selected{filter:none;transform:translateY(-10px)}
-.st-mon .art{position:relative;width:min(100%,38vh,380px);aspect-ratio:1;display:grid;place-items:end center}
+.st-mon .art{position:relative;width:min(100%,calc(38 * var(--vh)),380px);aspect-ratio:1;display:grid;place-items:end center}
 .st-mon .art img{position:relative;z-index:1;width:88%;height:88%;object-fit:contain;filter:drop-shadow(0 14px 14px rgba(0,0,0,.45));animation:bob 3.2s ease-in-out infinite}
 .st-mon:nth-child(2) .art img{animation-delay:-1s}.st-mon:nth-child(3) .art img{animation-delay:-2s}
 .st-mon .art::after{content:"";position:absolute;bottom:2%;left:50%;width:86%;height:18%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--tc) 80%,#fff),transparent);opacity:.55}
@@ -271,7 +272,7 @@ button.chip:hover{filter:brightness(1.25)}
 .chip.alert .ic{color:var(--hot-ink)}
 
 /* ---------- Boxes ---------- */
-.screen-boxes.active{display:grid;grid-template-rows:auto 1fr;height:calc(100dvh - var(--hud-h) - 70px);min-height:600px;padding:14px;background:radial-gradient(120% 90% at 100% 100%,rgba(255,255,255,.28),transparent 50%),var(--stripes),linear-gradient(155deg,#858ea0 0%,#697285 50%,#60697b 100%);box-shadow:var(--shadow);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px)}
+.screen-boxes.active{display:grid;grid-template-rows:auto 1fr;height:calc(100 * var(--vh) - var(--hud-h) - 70px);min-height:600px;padding:14px;background:radial-gradient(120% 90% at 100% 100%,rgba(255,255,255,.28),transparent 50%),var(--stripes),linear-gradient(155deg,#858ea0 0%,#697285 50%,#60697b 100%);box-shadow:var(--shadow);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px)}
 .boxes-layout{display:grid;grid-template-columns:minmax(200px,250px) minmax(0,1fr) minmax(320px,400px);gap:16px;min-height:0}
 .pill-head{padding:9px 14px;margin-bottom:10px;background:rgba(29,31,36,.65);font:800 1.1rem/1 var(--display);font-style:italic;text-transform:uppercase;text-align:center;clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%)}
 .box-party{display:flex;flex-direction:column;min-height:0}
@@ -336,7 +337,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .mark-row .ic{color:#ff7ad9;width:22px;height:22px}
 
 /* ---------- Shop / Bag ---------- */
-.screen-bag.active{display:grid;grid-template-rows:auto 1fr;height:calc(100dvh - var(--hud-h) - 70px);min-height:600px;gap:0;background:linear-gradient(180deg,rgba(29,32,37,.96),rgba(18,20,24,.98));box-shadow:var(--shadow);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px)}
+.screen-bag.active{display:grid;grid-template-rows:auto 1fr;height:calc(100 * var(--vh) - var(--hud-h) - 70px);min-height:600px;gap:0;background:linear-gradient(180deg,rgba(29,32,37,.96),rgba(18,20,24,.98));box-shadow:var(--shadow);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px)}
 .bag-band{position:relative;display:flex;align-items:center;gap:16px;padding:14px 26px;overflow:hidden;background:linear-gradient(100deg,#ff4d1f,#ff8a1a 45%,#ffbf2b);color:#2a0d00}
 .bag-band::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(-55deg,rgba(255,255,255,.14) 0 14px,transparent 14px 34px);animation:slide 12s linear infinite}
 @keyframes slide{to{background-position:200px 0}}
@@ -478,7 +479,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 
 /* ---------- Battle ---------- */
 .screen-battle.active{display:grid;grid-template-rows:auto auto;gap:12px;justify-items:center}
-.arena{position:relative;width:min(100%,calc((100dvh - 330px) * 16 / 9));aspect-ratio:16/9;min-height:300px;overflow:hidden;box-shadow:var(--shadow);
+.arena{position:relative;width:min(100%,calc((100 * var(--vh) - 330px) * 16 / 9));aspect-ratio:16/9;min-height:300px;overflow:hidden;box-shadow:var(--shadow);
   background:var(--arena-bg,none) center/100% 100% no-repeat,linear-gradient(180deg,#aab0bd 0%,#dbdee3 48%,#86cf6a 48.2%,#4b9a43 100%);clip-path:polygon(20px 0,100% 0,100% calc(100% - 20px),calc(100% - 20px) 100%,0 100%,0 20px)}
 .arena::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(9,10,11,.35))}
 .arena.light-dusk::before{background:linear-gradient(180deg,rgba(255,110,30,.62),rgba(200,70,110,.42) 55%,rgba(44,48,56,.5)),radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(30,0,20,.45));mix-blend-mode:multiply}
@@ -528,7 +529,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .foe-team{position:absolute;z-index:4;left:18px;top:136px;display:flex;gap:5px}
 .foe-team i{width:13px;height:13px;border-radius:50%;background:linear-gradient(#ff4b4b 0 45%,#1a1a1a 45% 55%,#f4f4f4 55%);box-shadow:0 0 0 1.5px #1a1a1a}
 .foe-team i.out{filter:grayscale(1) opacity(.45)}
-.battle-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,580px);gap:12px;width:min(100%,calc((100dvh - 330px) * 16 / 9));min-width:min(100%,960px)}
+.battle-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,580px);gap:12px;width:min(100%,calc((100 * var(--vh) - 330px) * 16 / 9));min-width:min(100%,960px)}
 .battle-log{position:relative;display:flex;align-items:center;min-height:128px;padding:18px 26px;background:linear-gradient(110deg,rgba(15,16,19,.95),rgba(38,41,48,.95));box-shadow:inset 0 0 0 2px rgba(255,255,255,.75),var(--shadow);font-size:1.2rem;font-weight:700;line-height:1.45;clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px))}
 .battle-cmd{display:grid;gap:8px;align-content:start}
 .cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -573,7 +574,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 
 /* ---------- Modal / toast ---------- */
 .modal-backdrop{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px;background:rgba(10,11,13,.78);backdrop-filter:blur(5px)}
-.modal{position:relative;width:min(640px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:26px;background:linear-gradient(165deg,#4c5360,#2b2f37 55%,#1d1f24);box-shadow:0 24px 70px rgba(0,0,0,.65);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px);animation:pop .22s ease-out}
+.modal{position:relative;width:min(640px,100%);max-height:calc(100 * var(--vh) - 32px);overflow:auto;padding:26px;background:linear-gradient(165deg,#4c5360,#2b2f37 55%,#1d1f24);box-shadow:0 24px 70px rgba(0,0,0,.65);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px);animation:pop .22s ease-out}
 .modal::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta),var(--hot))}
 .modal.wide{width:min(940px,100%)}
 @keyframes pop{from{opacity:0}to{opacity:1}}
@@ -600,7 +601,7 @@ button.cell:hover{background:rgba(37,41,48,.75)}
 .result-mon{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center;padding:8px 12px;background:rgba(255,255,255,.07);clip-path:polygon(0 0,100% 0,calc(100% - 8px) 100%,0 100%)}
 .result-mon img{width:56px;height:56px;object-fit:contain}
 .result-mon small{color:var(--muted);font-weight:700}
-.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;max-height:56dvh;overflow:auto}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;max-height:calc(56 * var(--vh));overflow:auto}
 .pick-grid button{display:grid;justify-items:center;gap:2px;padding:10px 6px;border:0;background:linear-gradient(170deg,rgba(103,112,131,.6),rgba(38,41,48,.92));font-weight:800;font-size:.85rem;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .pick-grid button:hover:not(:disabled),.pick-grid button.on{box-shadow:inset 0 0 0 3px var(--hot);background:linear-gradient(to bottom right,transparent calc(50% - 2.25px),var(--hot) calc(50% - 2.25px),var(--hot) calc(50% + 2.25px),transparent calc(50% + 2.25px)) top left/8px 8px no-repeat,linear-gradient(to bottom right,transparent calc(50% - 2.25px),var(--hot) calc(50% - 2.25px),var(--hot) calc(50% + 2.25px),transparent calc(50% + 2.25px)) bottom right/8px 8px no-repeat,linear-gradient(170deg,rgba(103,112,131,.6),rgba(38,41,48,.92))}
 .pick-grid img{width:64px;height:64px;object-fit:contain}
@@ -985,13 +986,11 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 @media (max-width:1560px){.hud-logo span{display:none}}
 @media (max-width:1320px){.hud-link{padding:10px 12px}}
 @media (max-width:1380px){
-  :root{--hud-h:auto}
   .hud{display:flex;flex-wrap:wrap;height:auto;padding-top:10px;padding-bottom:10px}
   .hud-nav{order:3;flex-basis:100%;justify-content:center;overflow-x:auto;scrollbar-width:none}
   .hud-right{margin-left:auto}
 }
 @media (max-width:820px){
-  :root{--hud-h:auto}
   .hud{display:flex;flex-wrap:wrap;height:auto;padding-top:10px;padding-bottom:10px}
   .hud-nav{order:3;flex-basis:100%;justify-content:flex-start;overflow-x:auto;scrollbar-width:none}
   .hud-trainer{margin-left:auto}
@@ -1041,3 +1040,88 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 }
 .reduced-effects *,.reduced-effects *::before,.reduced-effects *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* ---------- Device scaling ----------
+   The UI is sized in px, so large monitors scale the whole page with zoom
+   (keeping ~1600 CSS px of layout width) instead of leaving a small island in
+   the middle. Viewport units go through --vh, which divides out the zoom. */
+@media (min-width:1900px) and (min-height:980px){
+  :root{--z:1.18}
+  html{zoom:var(--z)}
+  /* Media queries see the real screen, so repeat the rules the ~1600 px layout needs. */
+  .hud{grid-template-columns:auto minmax(0,1fr) auto}
+}
+@media (min-width:2200px) and (min-height:1150px){:root{--z:1.36}}
+@media (min-width:2500px) and (min-height:1300px){:root{--z:1.55}}
+@media (min-width:3200px) and (min-height:1700px){:root{--z:2}}
+
+/* Scrollable tab strips fade at the edges so it's clear more tabs exist. */
+@media (max-width:1380px){
+  .hud-nav{scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent);padding:0 14px}
+  .hud-link{flex:0 0 auto;scroll-snap-align:center;white-space:nowrap}
+}
+@media (max-width:1020px){
+  .bag-cats{overflow-x:auto;scrollbar-width:none}
+  .bag-cats::-webkit-scrollbar{display:none}
+}
+
+/* Phones: a compact header so content gets the screen. */
+@media (max-width:820px){
+  .hud{gap:6px 8px;padding:8px 12px 6px}
+  .hud-logo img{width:34px;height:34px}
+  .hud-link{padding:8px 11px;font-size:.92rem}
+  main{padding-top:12px}
+  .tabbar{flex-wrap:wrap;row-gap:2px;padding-right:34px}
+  .tabbar .tab-on{white-space:nowrap}
+  .tabbar .muted{flex:1 1 120px;min-width:0;font-size:.88rem}
+}
+@media (max-width:560px){
+  .bag-band{flex-wrap:wrap;row-gap:6px;padding:12px 16px}
+  .band-sub{order:3;flex-basis:100%;font-size:.85rem}
+  .band-wallet{padding:6px 16px 6px 12px;font-size:1.15rem}
+  .band-title .ic{width:28px;height:28px}
+  .modal{padding:20px 16px}
+  .modal h2{font-size:1.6rem}
+}
+@media (max-width:360px){
+  .hud-link{padding:8px 9px;font-size:.86rem}
+  .wal{padding:0 12px 0 5px}
+  .wal.coin{padding-left:12px}
+}
+
+/* Landscape phones: one header row, and it scrolls away with the page. */
+@media (max-height:520px) and (orientation:landscape){
+  .hud{position:relative;flex-wrap:nowrap;padding-top:6px;padding-bottom:6px}
+  .hud-nav{order:0;flex:1 1 auto;flex-basis:auto;min-width:0;justify-content:flex-start}
+  .hud-logo span,.wal-txt small,.hud-trainer span{display:none}
+  .hud-right{margin-left:0}
+  .wal{height:38px}
+  .hud-link{padding:8px 10px;font-size:.9rem}
+  .fill,.screen-boxes.active,.screen-bag.active{height:auto;min-height:0}
+  .st-head{flex-direction:row;text-align:left}
+}
+
+/* Battle on phones: a taller arena so status cards don't cover the Pokémon,
+   and the player card keeps room for its slanted edge. */
+@media (max-width:820px){
+  .battle-screen .player-info,.player-info{padding-left:30px}
+}
+@media (max-width:820px) and (orientation:portrait){
+  .arena{min-height:min(400px,calc(48 * var(--vh)))}
+}
+@media (max-width:440px){
+  .status-card{width:min(230px,62%)}
+  .sc-top b{font-size:.95rem}
+}
+/* Landscape phones: arena and controls side by side, both on screen. */
+@media (max-height:520px) and (orientation:landscape){
+  .screen-battle.active{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto;align-items:start;justify-items:stretch}
+  .arena{width:100%;min-height:0;max-height:calc(100 * var(--vh) - 24px)}
+  .battle-bottom{grid-template-columns:1fr;width:100%;min-width:0;max-height:calc(100 * var(--vh) - 24px);overflow:auto}
+  .status-card{width:min(240px,56%);padding:6px 10px 8px}
+  .player-info{padding-left:30px}
+  .foe-info{top:40px}.foe-team{top:100px}
+  .battle-log{min-height:72px;font-size:.95rem}
+  .move-btn{min-height:64px}
+  .cmd{min-height:46px;font-size:1.1rem}
+}
